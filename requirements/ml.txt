@@ -1,0 +1,15 @@
+# Data engineering + ML stack. Installed and smoke-tested starting Volume 4
+# (pandas/sqlalchemy), Volume 5 (great-expectations/pydantic), Volume 7
+# (scikit-learn), Volume 8 (prophet - has a slow cmdstan build step, kept
+# isolated in its own volume on purpose), Volume 9 (xgboost/btyd).
+# NOTE: proposal specified `lifetimes`; replaced with `btyd`, its maintained
+# successor - see Volume 1, Section 1.5.
+pandas>=2.2,<3
+SQLAlchemy>=2,<3
+great-expectations>=1.0,<2
+pydantic>=2,<3
+scikit-learn>=1.4,<2
+scipy>=1.12,<2
+prophet>=1.1,<2
+xgboost>=2,<3
+btyd>=0.2
