@@ -1,0 +1,15 @@
+# Web framework + auth + async serving + task queue.
+# Versions verified installable together on 2026-07-11 (Volume 1/2 research).
+Django>=5.2,<5.3
+djangorestframework>=3.15,<3.16
+djangorestframework-simplejwt>=5.3,<6
+psycopg[binary]>=3.1,<4
+celery>=5.4,<6
+redis>=5,<6
+django-celery-beat>=2.7,<3
+python-decouple>=3.8,<4
+gunicorn>=23,<24
+uvicorn>=0.30,<1
+loguru>=0.7,<0.8
+groq>=0.9,<1
+jinja2>=3.1,<4
