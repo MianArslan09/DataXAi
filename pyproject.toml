@@ -7,10 +7,11 @@ exclude = '''/(\.venv|migrations|staticfiles)/'''
 profile = "black"
 line_length = 100
 skip = [".venv", "migrations"]
+src_paths = ["apps", "config"]
 
 [tool.ruff]
 line-length = 100
 exclude = [".venv", "migrations", "staticfiles"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B"]
+select = ["E", "F", "B"]

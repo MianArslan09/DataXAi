@@ -1,4 +1,8 @@
-"""Production settings. Full hardening pass happens in Volume 15 - this is the floor, not the ceiling."""
+"""Production settings.
+
+Full hardening pass happens in Volume 15 - this is the floor, not the ceiling.
+"""
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False

@@ -4,6 +4,7 @@ Environment-specific settings (dev/test/prod) import * from this module
 and override only what differs. See Volume 1, Section 1.4 for the
 layered-architecture rationale behind the apps/ split below.
 """
+
 import sys
 from pathlib import Path
 
@@ -40,14 +41,15 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "core",
     "accounts",
-    "etl",          # M1
-    "validation",   # M2
-    "detection",    # M3
-    "healing",      # M4
+    "warehouse",  # Clean Warehouse domain: Customer, Product, OrderLine
+    "etl",  # M1
+    "validation",  # M2
+    "detection",  # M3
+    "healing",  # M4
     "forecasting",  # M5 (Prophet half)
-    "clv",          # M5 (XGBoost half)
-    "nlp",          # M6
-    "dashboard",    # M7
+    "clv",  # M5 (XGBoost half)
+    "nlp",  # M6
+    "dashboard",  # M7
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -119,8 +121,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsPagination",
     "PAGE_SIZE": 25,
+    "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
 }
 
 # Celery - broker/result backend is Redis, matching Table 8's Docker Compose stack.
