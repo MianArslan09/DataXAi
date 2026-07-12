@@ -1,4 +1,5 @@
 """WSGI entrypoint - kept for management commands and any WSGI-only tooling."""
+
 import os
 
 from django.core.wsgi import get_wsgi_application

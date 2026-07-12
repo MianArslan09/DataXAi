@@ -3,6 +3,7 @@ CI / local test settings. Uses SQLite so the test suite needs no external
 services - Postgres-specific behaviour (JSONB, etc.) gets its own
 integration tests against the real docker-compose db, added in Volume 3.
 """
+
 from .base import *  # noqa: F401,F403
 
 DATABASES = {
