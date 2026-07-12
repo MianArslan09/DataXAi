@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Django
+*.sqlite3
+staticfiles/
+media/
+
+# Env / secrets
+.env
+*.local
+
+# Datasets & model artifacts (tracked separately - see docs/handbook)
+data/*
+!data/.gitkeep
+models/*.joblib
+models/*.pkl
+
+# Testing / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
