@@ -19,4 +19,6 @@ class HealthCheckView(APIView):
         except Exception:
             db_ok = False
         status_code = 200 if db_ok else 503
-        return Response({"status": "ok" if db_ok else "degraded", "database": db_ok}, status=status_code)
+        return Response(
+            {"status": "ok" if db_ok else "degraded", "database": db_ok}, status=status_code
+        )
