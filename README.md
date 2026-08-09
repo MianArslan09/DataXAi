@@ -9,6 +9,18 @@ Detects eight classes of data-quality faults in e-commerce batch pipelines, repa
 **Team:** M Arslan Ahmad ([@Arslan](https://github.com)) · Fatima Munawar
 **Supervisor:** Mr. Usama Shahzore, Dept. of Software Engineering, NUML Faisalabad
 
+## Dataset
+
+Real ETL development uses the actual UCI Online Retail II dataset, not a synthetic substitute. Place it at:
+
+```
+data/online_retail_II.xlsx
+```
+
+(gitignored - ~44MB, two sheets: `Year 2009-2010`, `Year 2010-2011`, 1,067,371 rows combined). Get it from the [UCI ML Repository](https://archive.ics.uci.edu/dataset/502/online+retail+ii). Automated tests instead use a small, real-row-derived fixture at `apps/etl/tests/fixtures/online_retail_ii_sample.csv` - see that folder's README for exactly which rows and why.
+
+**Two separate databases, do not confuse them:** `DATABASE_URL`/`POSTGRES_*` is DataXAi's own application/warehouse database (Django ORM). `SOURCE_DATABASE_URL` is a distinct upstream/source database that M1 reads *from* (SQLAlchemy) - it simulates an SME's own existing system and must never be the same connection as the app database.
+
 ## Quick Start
 
 ```bash
