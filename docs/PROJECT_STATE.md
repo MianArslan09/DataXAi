@@ -43,3 +43,73 @@ Proposal Table 4/M1 pairs SQLAlchemy with "CSV + PostgreSQL" sources. Two readin
 1. Resolve the source-DB decision above (proceeding with recommendation absent objection).
 2. Install + smoke-test `pandas`, `SQLAlchemy` for real.
 3. A small CSV fixture resembling UCI Online Retail II's columns (generated in-repo, not the full dataset).
+
+---
+
+## Checkpoint: Volume 4, Milestone 4.1 (ETL Prerequisites)
+
+**Status: 4.1 COMPLETE. 4.2 not started — awaiting approval per the controlled milestone process.**
+
+### Real UCI Online Retail II dataset — inspected characteristics (not fabricated)
+Source: `online_retail_II.xlsx` (43.5MB), sheets `Year 2009-2010` (525,461 rows) + `Year 2010-2011` (541,910 rows) = **1,067,371 rows combined**.
+
+| Characteristic | Finding |
+|---|---|
+| Columns | `Invoice, StockCode, Description, Quantity, InvoiceDate, Price, Customer ID, Country` (8 cols) |
+| Dtypes | Invoice=object, StockCode=object, Quantity=int64, InvoiceDate=datetime64[ns] (no tz), Price=float64, Customer ID=float64, Country=object |
+| Missing values | Description 4,382 (0.41%); Customer ID 243,007 (22.77%); all else 0 |
+| Duplicates | 34,335 fully-duplicate rows (3.22%) |
+| Date range | 2009-12-01 07:45 → 2011-12-09 12:50 |
+| Quantity | min=-80,995, max=80,995, mean=9.94; 22,950 negative (2.15%); 0 zero |
+| Price | min=-53,594.36, max=38,970.00, mean=4.65; **5 negative** (all `StockCode "B"`/"Adjust bad debt"); 6,202 zero (0.58%) |
+| Cancellations | 19,494 `Invoice` values start with `C` (1.83%); 19,493 have negative qty; **1 anomaly has positive qty** (`C496350`) |
+| Non-cancellation negative qty | 3,457 rows — negative `Quantity` but NOT `C`-prefixed (manual stock adjustments, distinct from customer cancellations) |
+| CustomerID | 5,942 distinct non-null customers |
+| StockCode | 5,305 distinct values; 11 administrative/non-product codes mixed in (`POST`, `DOT`, `M`, `D`, `S`, `ADJUST`, `PADS`, `CRUK`, `B`, `GIFT`, + `BANK CHARGES`/`gift_0001_*`), ~5,587 rows (0.52%) total |
+| Country | 43 distinct; United Kingdom = 981,330 rows (91.9%) |
+| Memory (loaded) | ~249MB as a pandas DataFrame (object dtypes) |
+| Read performance | 74.7s to read both sheets via `pandas.read_excel(engine="openpyxl")` on this sandbox — real, measured, not estimated |
+
+**Design-relevant findings flagged for Volume 4.3 (transform/business rules) — not decided or implemented yet:**
+- Administrative StockCodes (POST/D/M/etc.) are not real products; loading them as `Product` rows would pollute the catalog. Needs a decision in 4.3.
+- The 5 negative-price "Adjust bad debt" rows and the 1 positive-qty cancellation anomaly are edge cases the transform layer must explicitly handle, not silently coerce.
+
+### Files created
+- `apps/etl/tests/fixtures/online_retail_ii_sample.csv` — 18 rows, extracted directly from the real dataset (not synthetic), covering every characteristic above. Companion `fixtures/README.md` documents each row.
+- `data/online_retail_II.xlsx` — the real dataset, copied in locally, **gitignored, not committed** (confirmed via `git check-ignore`).
+
+### Files modified
+- `requirements/ml.txt` — added `openpyxl>=3.1,<4` (new dependency; justified: real dataset ships as `.xlsx`, `pandas.read_excel` needs it). `pandas`/`SQLAlchemy` were already declared (Volume 2); now actually installed and import-verified for the first time.
+- `config/settings/base.py` — added `SOURCE_DATABASE_URL` (external/upstream source, SQLAlchemy-managed, separate from `DATABASE_URL`) and `ETL_DATA_DIR`.
+- `.env.example`, `README.md` — documented the `DATABASE_URL` vs `SOURCE_DATABASE_URL` distinction and dataset placement.
+
+### Dependencies
+| Package | Status |
+|---|---|
+| `pandas==2.3.3` | INSTALLED, VERIFIED (import + version check passed) |
+| `SQLAlchemy==2.0.51` | INSTALLED, VERIFIED |
+| `openpyxl==3.1.5` | INSTALLED, VERIFIED — **new**, justified above |
+| `psycopg[binary]==3.3.4` | already installed (Volume 2), re-confirmed |
+
+### Verification
+| Check | Result |
+|---|---|
+| `manage.py check` | LOCALLY VERIFIED — 0 issues |
+| `manage.py makemigrations --check --dry-run` | LOCALLY VERIFIED — no changes detected |
+| `pytest` | LOCALLY VERIFIED — 29/29 passing (unchanged from Volume 3 — 4.1 touched no application logic) |
+| `ruff` / `black --check` / `isort --check-only` | LOCALLY VERIFIED — clean |
+| `docker compose config` (YAML) | LOCALLY VERIFIED — valid |
+| `docker compose build` / `up` | **NOT VERIFIED** — no Docker daemon in this sandbox, unchanged since Volume 2 |
+| Real dataset → warehouse load | **NOT VERIFIED** — no loading code exists yet; that's 4.2–4.4 |
+| `SOURCE_DATABASE_URL` live connection | **NOT VERIFIED** — no source DB stood up yet; deferred to 4.2 |
+| UCI VERIFIED | **NO** — dataset was inspected (real, measured), but not yet run through any pipeline (pipeline doesn't exist yet) |
+
+### Deferred (explicitly, not silently)
+- Docker `source_db` service — belongs to 4.2 (when the PostgreSQL source class actually needs something to connect to), not 4.1 (pure configuration).
+- Resolution of the administrative-StockCode / anomaly-row handling — belongs to 4.3 (business rules).
+- All actual source/transform/load code — 4.2, 4.3, 4.4 respectively.
+
+### Volume 4.2 prerequisites
+1. Approval to proceed.
+2. Source interface/protocol design (CSV + PostgreSQL implementations).
+3. `source_db` docker-compose service (deferred from 4.1, needed here).
