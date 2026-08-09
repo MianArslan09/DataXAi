@@ -35,6 +35,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      source_postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dataxai_source
+          POSTGRES_USER: dataxai_source
+          POSTGRES_PASSWORD: dataxai_source
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dataxai_source"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -45,12 +57,34 @@ jobs:
           --health-retries 5
     env:
       DJANGO_SETTINGS_MODULE: config.settings.test
+      TEST_SOURCE_DATABASE_URL: postgresql+psycopg://dataxai_source:dataxai_source@localhost:5433/dataxai_source
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements/dev.txt
+      - run: pip install -r requirements/dev.txt -r requirements/ml.txt
+      - name: Seed source_postgres with the real-data-derived fixture
+        run: |
+          python - <<'PYEOF'
+          import pandas as pd
+          from sqlalchemy import create_engine, text
+          url = "postgresql+psycopg://dataxai_source:dataxai_source@localhost:5433/dataxai_source"
+          engine = create_engine(url)
+          df = pd.read_csv("apps/etl/tests/fixtures/online_retail_ii_sample.csv")
+          df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"])
+          with engine.begin() as conn:
+              conn.execute(text('DROP TABLE IF EXISTS "raw_transactions"'))
+              conn.execute(text('''
+                  CREATE TABLE "raw_transactions" (
+                      "Invoice" TEXT, "StockCode" TEXT, "Description" TEXT,
+                      "Quantity" INTEGER, "InvoiceDate" TIMESTAMP, "Price" NUMERIC,
+                      "Customer ID" NUMERIC, "Country" TEXT
+                  )
+              '''))
+          df.to_sql("raw_transactions", engine, if_exists="append", index=False)
+          engine.dispose()
+          PYEOF
       - run: pytest --cov=apps --cov-report=term-missing
 
   docker-build:
