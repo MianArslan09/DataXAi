@@ -113,3 +113,59 @@ Source: `online_retail_II.xlsx` (43.5MB), sheets `Year 2009-2010` (525,461 rows)
 1. Approval to proceed.
 2. Source interface/protocol design (CSV + PostgreSQL implementations).
 3. `source_db` docker-compose service (deferred from 4.1, needed here).
+
+---
+
+## Checkpoint: Volume 4, Milestone 4.2 (Source Abstraction)
+
+**Status: 4.2 COMPLETE. 4.3 not started — awaiting approval.**
+
+### What was built
+`apps/etl/sources/{contract,csv_source,excel_source,postgres_source}.py` + `apps/etl/exceptions.py` (5 new exception classes, all subclassing `core.exceptions.DataXAiError` — no parallel error system). Canonical contract: every source is a context manager yielding `SourceBatch(data: DataFrame[CANONICAL_COLUMNS], ...)`. Transform (4.3) will consume this without knowing which source produced it — proven, not asserted, by `test_sources_contract.py`.
+
+### Files created
+`apps/etl/exceptions.py`; `apps/etl/sources/{__init__,contract,csv_source,excel_source,postgres_source}.py`; `apps/etl/tests/test_sources_{csv,excel,postgres,contract}.py`; `apps/etl/tests/fixtures/{online_retail_ii_sample.xlsx,malformed.csv,missing_columns.csv}`; `scripts/verify_excel_source_real_data.py`.
+
+### Files modified
+`docker-compose.yml` (+`source_db` service, +`source_postgres_data` volume — deferred from 4.1, needed now); `.github/workflows/ci.yml` (+`source_postgres` service container, seeds `raw_transactions`, sets `TEST_SOURCE_DATABASE_URL`).
+
+### Real UCI dataset verification (UCI VERIFIED = YES, for ExcelSource)
+Ran `scripts/verify_excel_source_real_data.py` against the actual `data/online_retail_II.xlsx` (not the fixture):
+
+| Metric | Real, measured result |
+|---|---|
+| Rows extracted | **1,067,371** — exactly matches Volume 4.1's inspection (525,461 + 541,910); both real sheets read completely, nothing dropped or duplicated |
+| Batches | 22 (`batch_size=50,000`) |
+| Elapsed | **182.4s** |
+| Peak memory (tracemalloc) | **68.0 MB** |
+
+**Honest trade-off discovered, not hidden:** this is *slower* than Volume 4.1's naive `pandas.read_excel()` benchmark (182.4s vs 74.7s) but uses dramatically less memory (68MB vs ~249MB). The streaming `openpyxl.iter_rows()` approach was chosen deliberately for the 8GB-RAM target hardware in the proposal's hardware requirements (§5.1) — memory was prioritized over raw speed. Documented here as a known, measured, intentional trade-off, not a defect. If a future volume needs faster bulk loads on beefier hardware, `pandas.read_excel()` directly is the documented alternative, at the stated memory cost.
+
+### Postgres verification
+Real (not mocked) local Postgres 16.14 installed in this sandbox for testing; `raw_transactions` table seeded from the same 18 real fixture rows as CSV/Excel. All `PostgresSource` tests — including a genuine connection-failure case (wrong port) — run against this real server.
+**LOCALLY VERIFIED** = yes (this sandbox's Postgres). **CI wiring added** (a `source_postgres` service container + seed step in `ci.yml`) but **actual GitHub Actions execution is NOT VERIFIED** — this sandbox cannot trigger a real CI run; needs confirming on an actual push.
+One real hiccup during this session: the local Postgres server process stopped mid-session (data survived, `service postgresql start` brought it back) — noted here in case it recurs; not a code defect.
+
+### Verification summary
+| Check | Result |
+|---|---|
+| `manage.py check` / `makemigrations --check` | LOCALLY VERIFIED |
+| `pytest` (full regression, Volumes 1–4.2) | LOCALLY VERIFIED — **50/50 passing** (29 pre-existing + 21 new; some Postgres tests skip cleanly, not falsely-pass, if no Postgres is reachable) |
+| `ruff` / `black --check` / `isort --check-only` | LOCALLY VERIFIED — clean across `apps/`, `config/`, `scripts/` |
+| `docker compose config` (YAML) | LOCALLY VERIFIED |
+| `docker compose build` / `up` | **NOT VERIFIED** — no Docker daemon in this sandbox, unchanged since Volume 2 |
+| CI workflow (`source_postgres` wiring) | **NOT VERIFIED** — YAML-valid, never actually run on GitHub |
+| PostgresSource against real Postgres | **POSTGRES VERIFIED** (local sandbox instance) |
+| ExcelSource against the real UCI file | **UCI VERIFIED** (see table above) |
+| CsvSource against real-scale data | **NOT VERIFIED** at real scale — only the 18-row fixture + malformed/missing-column edge cases. Lower risk than Excel (pandas' native `chunksize` is well-established library behavior, not custom code), but not proven at 1M-row scale. Deferred as a nice-to-have, not a blocker. |
+
+### Known limitation (documented, not hidden)
+`PostgresSource` assumes the source table already matches `CANONICAL_COLUMNS`. Real arbitrary-schema upstream systems would need per-deployment column mapping — out of scope for this FYP, noted as future work.
+
+### Dependencies
+No new packages beyond Volume 4.1 (`pandas`, `SQLAlchemy`, `openpyxl`, `psycopg` — all already declared and installed). Unrelated finding while reinstalling `requirements/ml.txt` this session: `btyd>=0.2` does not resolve on PyPI (only an alpha `0.1a1` exists, Python-version-restricted). **Not a 4.2 blocker** — flagged here for Volume 9.
+
+### Volume 4.3 prerequisites
+1. Approval to proceed.
+2. `CANONICAL_COLUMNS` (raw source names) → warehouse field names (`invoice_no`, `stock_code`, ...) alias map design.
+3. Resolution of the administrative-StockCode (`POST`/`D`/`M`/etc.) and anomaly-row (negative price, positive-qty cancellation) handling, flagged in 4.1, still undecided.
