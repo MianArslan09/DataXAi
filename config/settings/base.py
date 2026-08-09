@@ -96,6 +96,19 @@ DATABASES = {
     }
 }
 
+# M1 ETL - external/upstream source database, SQLAlchemy-managed.
+# Deliberately separate from DATABASES["default"] above: that's the
+# DataXAi application/warehouse database (Django ORM); this is the
+# simulated SME's own upstream system DataXAi reads FROM. The two must
+# never be the same connection - see Volume 4.1.
+SOURCE_DATABASE_URL = config(
+    "SOURCE_DATABASE_URL",
+    default="postgresql+psycopg://dataxai_source:dataxai_source@source_db:5432/dataxai_source",
+)
+
+# Where CSV-source files are read from by default (M1's CSV source, Volume 4.2).
+ETL_DATA_DIR = config("ETL_DATA_DIR", default=str(BASE_DIR / "data"))
+
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
