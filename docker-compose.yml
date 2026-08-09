@@ -23,6 +23,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # External/upstream source database - simulates an SME's own existing
+  # Postgres system that M1 reads FROM. Deliberately a separate service
+  # from `db` above (DataXAi's own application/warehouse database) - see
+  # Volume 4.1/4.2 architecture notes. Not part of the DataXAi app itself;
+  # in a real deployment this would be the customer's own database, not
+  # something DataXAi provisions. Kept here so `docker compose up` gives
+  # a complete, runnable demo environment out of the box.
+  source_db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dataxai_source
+      POSTGRES_USER: dataxai_source
+      POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:-dataxai_source}
+    volumes:
+      - source_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dataxai_source"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   web:
     build:
       context: .
@@ -94,4 +115,5 @@ services:
 
 volumes:
   postgres_data:
+  source_postgres_data:
   static_volume:
