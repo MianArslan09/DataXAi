@@ -19,7 +19,7 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "apps"))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.test")
-import django
+import django  # noqa: E402 - must follow sys.path setup above
 
 django.setup()
 
