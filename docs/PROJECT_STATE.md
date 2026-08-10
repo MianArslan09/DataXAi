@@ -130,16 +130,20 @@ Source: `online_retail_II.xlsx` (43.5MB), sheets `Year 2009-2010` (525,461 rows)
 `docker-compose.yml` (+`source_db` service, +`source_postgres_data` volume — deferred from 4.1, needed now); `.github/workflows/ci.yml` (+`source_postgres` service container, seeds `raw_transactions`, sets `TEST_SOURCE_DATABASE_URL`).
 
 ### Real UCI dataset verification (UCI VERIFIED = YES, for ExcelSource)
-Ran `scripts/verify_excel_source_real_data.py` against the actual `data/online_retail_II.xlsx` (not the fixture):
+Ran `scripts/verify_excel_source_real_data.py` against the actual `data/online_retail_II.xlsx` (not the fixture). **Run twice, in two different sandbox sessions** (state doesn't persist between sessions - see repo-restore note at top of this file) - reporting both, since they differ and hiding that would be dishonest:
 
-| Metric | Real, measured result |
-|---|---|
-| Rows extracted | **1,067,371** — exactly matches Volume 4.1's inspection (525,461 + 541,910); both real sheets read completely, nothing dropped or duplicated |
-| Batches | 22 (`batch_size=50,000`) |
-| Elapsed | **182.4s** |
-| Peak memory (tracemalloc) | **68.0 MB** |
+| Metric | Session 1 | Session 2 (this session) |
+|---|---|---|
+| Rows extracted | 1,067,371 | **1,067,371** (identical - correctness is stable) |
+| Batches | 22 | 22 |
+| Elapsed | 182.4s | **258.7s** |
+| Peak memory (tracemalloc) | 68.0 MB | **68.0 MB** (identical) |
 
-**Honest trade-off discovered, not hidden:** this is *slower* than Volume 4.1's naive `pandas.read_excel()` benchmark (182.4s vs 74.7s) but uses dramatically less memory (68MB vs ~249MB). The streaming `openpyxl.iter_rows()` approach was chosen deliberately for the 8GB-RAM target hardware in the proposal's hardware requirements (§5.1) — memory was prioritized over raw speed. Documented here as a known, measured, intentional trade-off, not a defect. If a future volume needs faster bulk loads on beefier hardware, `pandas.read_excel()` directly is the documented alternative, at the stated memory cost.
+Row counts and memory are exactly reproducible; wall-clock time varies with this sandbox's underlying CPU/IO conditions between sessions, not with the code. Treat elapsed time as "~3-4 minutes, varies," not a precise constant.
+
+**Bug found and fixed this session:** running the script directly (`python scripts/verify_excel_source_real_data.py`) failed with `ModuleNotFoundError: No module named 'config'` — Python puts the *script's* directory (`scripts/`) on `sys.path`, not the repo root, so `config` and the `apps/` import trick were never reachable. Fixed by explicitly inserting the repo root and `apps/` onto `sys.path` at the top of the script, before `django.setup()`. This only affects this standalone script, run outside `manage.py`/`pytest` (both of which already handle this correctly) - no application code was affected, confirmed by the full regression suite still passing 50/50 after the fix.
+
+**Honest trade-off discovered, not hidden:** this streaming approach is slower than Volume 4.1's naive `pandas.read_excel()` benchmark (~3-4 min vs 74.7s) but uses dramatically less memory (68MB vs ~249MB). The streaming `openpyxl.iter_rows()` approach was chosen deliberately for the 8GB-RAM target hardware in the proposal's hardware requirements (§5.1) — memory was prioritized over raw speed. If a future volume needs faster bulk loads on beefier hardware, `pandas.read_excel()` directly is the documented alternative, at the stated memory cost.
 
 ### Postgres verification
 Real (not mocked) local Postgres 16.14 installed in this sandbox for testing; `raw_transactions` table seeded from the same 18 real fixture rows as CSV/Excel. All `PostgresSource` tests — including a genuine connection-failure case (wrong port) — run against this real server.
