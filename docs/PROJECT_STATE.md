@@ -2,6 +2,33 @@
 
 Persistent checkpoint, updated at the end of every volume. Append below; don't delete history.
 
+## Historical Snapshot — 2026-10-04
+
+This section records live repository observations made on 2026-10-04. It is retained as history and superseded by the latest dated checkpoint at the end of this file. Its status statements do not describe the current checkout.
+
+### Repository
+- Branch at inspection: `main`, tracking `origin/main`.
+- HEAD at inspection: `56fc002` (`fix(scripts): E402 lint error introduced by the sys.path fix`).
+- Before these documentation edits, Git status showed the new/untracked `AGENTS.md`, `.github/copilot-instructions.md`, `dataxaienv/`, and `docs/handbook/PROJECT_ROADMAP.md`; the first two and handbook roadmap were empty. `docs/PROJECT_ROADMAP.md` did not exist.
+- `dataxaienv/Scripts/python.exe` exists in the live tree. Python version, Django/pytest imports, and dependency health were not checked during this documentation update.
+
+### Implementation Observed
+- The live `apps/etl/` inventory contains the source abstraction (`CsvSource`, `ExcelSource`, `PostgresSource`, and the `SourceBatch` contract), ETL tests, and `PipelineRun` model/migration.
+- No ETL transform module appears in the live ETL file inventory. Volume 4.3 remains the next intended ETL milestone, subject to the bootstrap verification gate and its pending business-rule decisions.
+- Existing app implementations must be confirmed from current source before claiming their status; this snapshot is not a full application audit.
+
+### Verification Performed for This Snapshot
+- Read repository overview, existing project-state history, existing agent guidance/roadmap files, live ETL file inventory, and Git state.
+- No tests, migrations, Django checks, package installs, or application runtime checks were performed as part of this documentation update.
+- Overall Django/bootstrap health: **NOT VERIFIED** in this update.
+- Test suite: **NOT VERIFIED** in this update.
+- Docker runtime: **NOT VERIFIED** in this update.
+- PostgreSQL and UCI end-to-end behavior: historical checkpoint claims remain below; not re-run in this update.
+
+## Historical Checkpoint Log
+
+The following checkpoint entries are preserved from prior project history. Their results describe those earlier sessions and are not current verification unless independently repeated and recorded above.
+
 ---
 
 ## Checkpoint: Pre-Volume 4 Audit (post–Volume 3)
@@ -173,3 +200,135 @@ No new packages beyond Volume 4.1 (`pandas`, `SQLAlchemy`, `openpyxl`, `psycopg`
 1. Approval to proceed.
 2. `CANONICAL_COLUMNS` (raw source names) → warehouse field names (`invoice_no`, `stock_code`, ...) alias map design.
 3. Resolution of the administrative-StockCode (`POST`/`D`/`M`/etc.) and anomaly-row (negative price, positive-qty cancellation) handling, flagged in 4.1, still undecided.
+
+---
+
+## Historical Bootstrap Checkpoint — 2026-10-04
+
+**Date:** 2026-10-04
+**Repository:** `D:\DataXAi`
+
+This section records the bootstrap/environment checkpoint reported for the checkout on 2026-10-04. It is preserved as historical evidence and is superseded by the latest dated checkpoint below.
+
+## Git
+
+- Alignment baseline reported: branch `main`, remote `origin` → `https://github.com/MianArslan09/DataXAi.git`, local `main` tracking `origin/main`, working tree clean after Git alignment.
+- At the start of this documentation task, status showed existing context-file edits, `dataxaienv/`, and `docs/handbook/PROJECT_ROADMAP.md` as untracked. The final status check for this task lists `docs/PROJECT_STATE.md` as modified and `AGENTS.md`, `.github/copilot-instructions.md`, `docs/PROJECT_ROADMAP.md`, and `dataxaienv/` as untracked; `docs/handbook/PROJECT_ROADMAP.md` no longer appears in that final output. Do not discard these paths.
+
+## Environment
+
+- Environment: `D:\DataXAi\dataxaienv` (recreated; reported for this checkpoint).
+- Python: `3.12.10`.
+- pip: `26.2.1`.
+- `requirements/dev.txt` installation: completed successfully (reported).
+
+## Current Verification
+
+- `python manage.py check`: **LOCALLY VERIFIED** — “System check identified no issues (0 silenced).”
+- `python manage.py makemigrations --check --dry-run`: **NOT VERIFIED** in the current environment.
+- Full current pytest run after environment recreation: **NOT VERIFIED**.
+- Current re-verification is in progress; do not infer any additional test counts or results.
+- Volume 4.2 remains historical checkpoint evidence; re-verify it against the live checkout as needed.
+- Volume 4.3 implementation has **NOT started**.
+
+---
+
+# Current Live Checkpoint — 2026-10-11: Volume 4.3.1
+
+This checkpoint records the live repository and verification evidence reviewed on 2026-10-11. Older dated snapshots and milestone history above are retained as historical records and are not current status.
+
+## Repository baseline
+
+- Repository: `D:\DataXAi`; branch: `main`.
+- HEAD: `136c6db` (`feat(etl): implement transform layer and alias mapping`), also at `origin/main` during this audit.
+- Preceding source-database host-port change: `d90dc51` (`fix(docker): expose source database for local ETL tests`).
+- Existing local changes were preserved: modified `.gitignore` and `docs/PROJECT_STATE.md`; untracked `.github/copilot-instructions.md`, `AGENTS.md`, and `docs/PROJECT_ROADMAP.md`.
+- The untracked `DataXAi Volume Tracker.xlsx` was found during this audit and updated in place; its existing sheet, table, formatting, and data-validation structure were preserved. The workbook contains no formulas.
+- No application source, test, dependency, Docker, environment, or database files were changed during this documentation reconciliation.
+
+## Volume 4.3.1 implementation
+
+The following files are present in Git from commit `136c6db`:
+
+- `apps/etl/transforms/__init__.py`
+- `apps/etl/transforms/contract.py`
+- `apps/etl/transforms/alias_mapper.py`
+- `apps/etl/tests/test_transforms_contract.py`
+- `apps/etl/tests/test_transforms_alias.py`
+
+The data flow is:
+
+`CSV / Excel / PostgreSQL -> SourceBatch -> AliasMapper -> TransformedBatch`
+
+`SourceBatch` carries the source's raw canonical columns and extraction metadata. `AliasMapper` selects the eight required raw columns in `CANONICAL_COLUMNS` order, renames them using the immutable `ALIAS_MAP`, drops unexpected extra columns, and returns a `TransformedBatch` carrying the source name, batch number, and extraction timestamp. Missing required raw columns raise the existing `MissingColumnsError`; the mapper rechecks them because a batch's DataFrame can be mutated after construction.
+
+Tests verify that mapping preserves row order, index, values, dtypes, row count, and batch metadata and does not mutate the input DataFrame. The mapper's output has exactly the target columns in deterministic order. `TransformedBatch` itself enforces the presence of every target column while allowing a superset for later stages to add derived fields.
+
+Volume 4.3.1 is structural mapping only. Type coercion, date parsing/normalization, data validation, filtering, healing, and loading are separate responsibilities and are not implemented by this substep. The fixture tests also verify that this mapping does not remove or decide the status of duplicate rows, administrative stock codes, negative prices, null values, or cancellation anomalies.
+
+## Latest local verification evidence
+
+The ETL test runs used the existing Windows `dataxaienv` and a process-local `TEST_SOURCE_DATABASE_URL` pointing to `postgresql+psycopg://dataxai_source:dataxai_source@localhost:5433/dataxai_source`, with `PGCONNECT_TIMEOUT=3`. These overrides were not persisted as environment changes.
+
+| Check | Result |
+|---|---|
+| Focused PostgreSQL/source/transform suite | **28 passed**; included real PostgresSource tests and PostgreSQL-to-transform comparison |
+| Full `pytest -q -rs` suite | **89 passed, 0 skipped** |
+| `ruff check apps config` | Passed |
+| `black --check apps config` | Passed; 109 files unchanged |
+| `isort --check-only apps config` | Exit code 0; 11 files skipped by isort configuration |
+| `python manage.py check` | Passed; no system-check issues |
+| `docker compose config --quiet` | Passed |
+| `python manage.py makemigrations --check --dry-run` | Reported no model changes, but emitted a warning because host-side application-database authentication failed; migration-history consistency is **NOT VERIFIED** |
+
+The source PostgreSQL service was healthy on host port `5433`. Its `dataxai_source` database contained `raw_transactions` with 18 fixture rows and the expected eight source columns. The PostgreSQL tests were therefore run against the source database, not the application database.
+
+## Historical Application Database Caveat at the 4.3.1 Checkpoint
+
+This records the state at the time of the Volume 4.3.1 checkpoint. The 2026-10-11 database-recovery follow-up below supersedes this caveat for the current local environment.
+
+The separate application PostgreSQL service is `db` on host port `5432`. Its `dataxai` database and `dataxai` role exist inside the container, but the application database had no `django_migrations` table when inspected. A Windows host connection to `localhost:5432` reached PostgreSQL but failed password authentication for `dataxai`. A host-side Django migration-history check therefore did not complete. The successful `manage.py check` and “No changes detected” model-drift result did not establish application database migration state or production readiness at that earlier checkpoint.
+
+## Milestone status and handoff
+
+- **4.3.1 — Implemented and locally verified; awaiting project-owner review and acceptance.** Passing tests are implementation evidence, not owner acceptance.
+- **4.3.1a — Planned, not started.** Scope: duplicate canonical-column protection and dedicated tests.
+- **4.3.2 — Planned, not started.** Scope: type coercion. Do not begin until 4.3.1 and 4.3.1a are integrated, locally verified, reviewed, and explicitly accepted.
+- Later transformation steps, ETL loading, PipelineRun orchestration, and the full Volume 4 end-to-end checkpoint remain planned. Volume 4 is not complete.
+- Full UCI-dataset transformation and application-database migration-history verification were not performed in this checkpoint.
+
+## Development diary: transform-layer checkpoint
+
+The transform layer is needed to separate source-specific extraction from downstream processing. CSV, Excel, and PostgreSQL adapters produce the same `SourceBatch` contract, so downstream code can consume a stable representation without knowing the source implementation. `TransformedBatch` is the next contract: it retains lineage metadata while exposing warehouse-oriented field names.
+
+For 4.3.1, the approved design is a deterministic alias map from the eight raw UCI names to warehouse field names. The mapper selects the canonical inputs in their defined order, discards unrelated extra columns, rejects missing required fields with the existing ETL exception, and changes names only. The tests demonstrate source-independent behavior across CSV, Excel, and the reachable PostgreSQL fixture, along with preservation of rows, values, dtypes, index, and metadata and no mutation of the input frame.
+
+Type conversion, date normalization, validation, business-rule resolution, healing, and database loading are outside this substep. In particular, negative quantity remains valid business data; negative unit price is a fault for the appropriate later stage. Tests demonstrate software behavior on the checked fixtures; they are not research-paper evidence or thesis conclusions.
+
+The source-database debugging lesson was to distinguish the application database (`db`, port 5432) from the ETL source database (`source_db`, port 5433), and to set a host-reachable test URL when running pytest from Windows. The source integration tests now pass. At this checkpoint the application database still had an authentication/migration-history caveat; the later dated follow-up records its recovery for the current local environment. The next gate is project-owner review and acceptance of 4.3.1; only after that should 4.3.1a be considered. Keep 4.3.2 blocked until both preceding substeps pass review and local verification.
+
+---
+
+## Follow-up Checkpoint — 2026-10-11: Application Database Recovery
+
+This dated follow-up records the successful recovery of the local application PostgreSQL database after the authentication and missing-migration-history issue documented in the preceding checkpoint. It supersedes that earlier caveat for the current local environment only; the earlier observation remains preserved as historical evidence.
+
+**Status: LOCALLY VERIFIED** for local application database bootstrap and migration state only.
+
+The relevant existing milestone is **Volume 3 — Database Design, Authentication, Authorization & Core Backend Infrastructure**. The Volume 3 handbook describes creating and migrating the application's database schema. Volume 2 provides the environment and Docker database service, but this recovery concerns application schema migrations and therefore is recorded under Volume 3. It is separate from ETL Volume 4.3.1.
+
+### Verified recovery evidence supplied for this checkpoint
+
+- The application PostgreSQL Compose service `db` was healthy on host port `5432`.
+- The target database and role were both `dataxai`.
+- Before migration, the `public` schema contained zero tables.
+- A read-only migration plan listed the initial Django migrations.
+- `python manage.py migrate` completed successfully; every migration in the reported plan ended in `OK`.
+- `python manage.py showmigrations` showed all listed migrations as applied (`[X]`).
+- `python manage.py check` reported no system-check issues.
+- A final PostgreSQL query reported 22 tables in the `public` schema.
+- Effective Django database settings used database `dataxai`, user `dataxai`, host `localhost`, and port `5432`.
+
+The prior host-side password-authentication failure and absence of `django_migrations` were true observations at the earlier checkpoint, before recovery. The migration-history caveat is now superseded for this local database by the successful migration and `showmigrations` evidence above.
+
+This evidence verifies local database bootstrap and migration state only. It does not establish successful end-to-end application workflows, production readiness, or resolution of unrelated issues. Volume 4.3.1 remains implemented and locally verified, awaiting project-owner review and acceptance; 4.3.1a and 4.3.2 remain planned and not started.
