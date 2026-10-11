@@ -29,6 +29,11 @@ class MissingColumnsError(ETLError):
     code = "missing_columns"
 
 
+class AmbiguousColumnsError(ETLError):
+    default_message = "The source data contains duplicate required columns."
+    code = "ambiguous_columns"
+
+
 class SourceConnectionError(ETLError):
     default_message = "Could not connect to the source."
     code = "source_connection_error"

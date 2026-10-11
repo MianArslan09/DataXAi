@@ -8,7 +8,7 @@ row order, index, dtypes and values pass through exactly as the Source
 produced them.
 """
 
-from etl.exceptions import MissingColumnsError
+from etl.exceptions import AmbiguousColumnsError, MissingColumnsError
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
 from etl.transforms.contract import ALIAS_MAP, TransformedBatch
 
@@ -24,6 +24,26 @@ class AliasMapper:
             raise MissingColumnsError(
                 f"{batch.source_name} batch {batch.batch_number} is missing "
                 f"columns: {sorted(missing)}"
+            )
+
+        positions_by_column = {column: [] for column in CANONICAL_COLUMNS}
+        for position, column in enumerate(batch.data.columns):
+            if column in positions_by_column:
+                positions_by_column[column].append(position)
+
+        duplicates = {
+            column: positions
+            for column, positions in positions_by_column.items()
+            if len(positions) > 1
+        }
+        if duplicates:
+            details = "; ".join(
+                f"{column!r} at zero-based positions {positions}"
+                for column, positions in duplicates.items()
+            )
+            raise AmbiguousColumnsError(
+                f"{batch.source_name} batch {batch.batch_number} contains "
+                f"duplicate required source columns: {details}"
             )
 
         # Select exactly the 8 raw columns in canonical order (any extra
