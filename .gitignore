@@ -32,3 +32,6 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
+
+# Local volume-by-volume progress tracker
+/DataXAi Volume Tracker.xlsx
