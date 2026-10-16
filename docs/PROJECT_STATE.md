@@ -331,4 +331,16 @@ The relevant existing milestone is **Volume 3 — Database Design, Authenticatio
 
 The prior host-side password-authentication failure and absence of `django_migrations` were true observations at the earlier checkpoint, before recovery. The migration-history caveat is now superseded for this local database by the successful migration and `showmigrations` evidence above.
 
-This evidence verifies local database bootstrap and migration state only. It does not establish successful end-to-end application workflows, production readiness, or resolution of unrelated issues. Volume 4.3.1 remains implemented and locally verified, awaiting project-owner review and acceptance; 4.3.1a and 4.3.2 remain planned and not started.
+This evidence verifies local database bootstrap and migration state only. It does not establish successful end-to-end application workflows, production readiness, or resolution of unrelated issues. As of October 11, 2026, Volume 4.3.1 remains implemented and locally verified, awaiting project-owner review and acceptance; 4.3.1a and 4.3.2 remain planned and not started.
+
+---
+
+## Current Milestone Status — 2026-10-16
+
+This update supersedes the 2026-10-11 milestone status above while preserving that dated snapshot as history.
+
+- **4.3.1 — Alias mapping: IMPLEMENTED and LOCALLY VERIFIED.** Current-main implementation commit: `c406b19`. The repository records implementation and verification; formal owner acceptance is not established by the current documentation.
+- **4.3.1a — Duplicate canonical-column protection: IMPLEMENTED, COMMITTED, and LOCALLY VERIFIED.** Current-main commit: `35f0e8d`, which adds `AmbiguousColumnsError`, rejects duplicate required source labels, and adds focused ambiguity tests. Formal owner acceptance is not separately recorded in the current documentation.
+- **4.3.2 — Type coercion: NEXT PLANNED MILESTONE; NOT IMPLEMENTED.** Preserve the existing prerequisite gate requiring 4.3.1 and 4.3.1a to be reviewed and explicitly accepted before starting.
+
+This status update does not claim fresh test execution, end-to-end ETL completion, or production readiness.

@@ -40,9 +40,9 @@ The supplied filename `volume-02-environment-repository.md` is not present in th
 
 ## Volume 4.3 Submilestone Status
 
-**4.3.1 — Transform contract and alias mapping: IMPLEMENTED and LOCALLY VERIFIED; awaiting project-owner review and acceptance.** Implementation commit: `136c6db`. See `docs/PROJECT_STATE.md` for exact behavior and evidence. Passing tests do not constitute owner acceptance.
-- **4.3.1a — Duplicate canonical-column protection: PLANNED, not started.** Implement only after the 4.3.1 review and acceptance gate.
-- **4.3.2 — Type coercion: PLANNED, not started.** Do not begin until 4.3.1 and 4.3.1a are integrated, locally verified, reviewed, and explicitly accepted.
+**4.3.1 — Transform contract and alias mapping: IMPLEMENTED and LOCALLY VERIFIED.** Current-main commit: `c406b19`. Formal owner acceptance is not confirmed by the current project records; see `docs/PROJECT_STATE.md`.
+- **4.3.1a — Duplicate canonical-column protection: IMPLEMENTED, COMMITTED, and LOCALLY VERIFIED.** Current-main commit: `35f0e8d`. Formal owner acceptance is not separately recorded in the current project records.
+- **4.3.2 — Type coercion: NEXT PLANNED MILESTONE; NOT IMPLEMENTED.** Do not begin until 4.3.1 and 4.3.1a are reviewed and explicitly accepted.
 
 Remaining Volume 4.3 scope (planned):
 - type coercion

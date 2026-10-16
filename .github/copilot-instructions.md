@@ -11,7 +11,7 @@ Before changing code, read:
 Rules:
 - Live repository state is authoritative. Inspect existing implementation and tests before editing.
 - Work one gated sub-step at a time. Verify it, report exact status, and stop. Do not assume historical “Done” claims are currently verified or silently enter a later milestone.
-- Volume 4.3.1 is implemented and locally verified at `136c6db`, pending owner acceptance. Do not start 4.3.1a or 4.3.2 until the owner accepts 4.3.1. Do not start 4.3.2 until 4.3.1a is also integrated, locally verified, reviewed, and accepted.
+- Volume 4.3.1 alias mapping is implemented and locally verified at current-main commit `c406b19`. Volume 4.3.1a duplicate canonical-column protection is implemented, committed at current-main commit `35f0e8d`, and locally verified. Formal owner acceptance is not recorded in the current project documentation. Volume 4.3.2 type coercion is next planned and not implemented; do not start it until 4.3.1 and 4.3.1a have been reviewed and explicitly accepted.
 - Do not create parallel implementations or modify unrelated modules. Preserve user changes; do not run destructive Git operations or rewrite history.
 - Never stage automatically; when staging is explicitly authorized, stage only the named paths. Never commit or push automatically.
 - Never create another virtual environment unless explicitly required. Do not install packages or modify requirements.

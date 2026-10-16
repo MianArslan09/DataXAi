@@ -23,7 +23,7 @@ The requested path `volume-02-environment-repository.md` is absent from the live
 - Inspect the live implementation, tests, migrations, settings, documentation, and CI before changing anything.
 - Implement one approved sub-step at a time, verify that sub-step for real, report the result, and stop for approval.
 - Never silently continue into another milestone or implement a later volume early.
-- Volume 4.3.1 (transform contract and alias mapping) is implemented at commit `136c6db` and locally verified; it is awaiting project-owner review and acceptance. Do not begin 4.3.1a until that review/acceptance gate is satisfied. Do not begin 4.3.2 until 4.3.1 and 4.3.1a are integrated, locally verified, reviewed, and explicitly accepted.
+- Volume 4.3.1 (transform contract and alias mapping) is implemented at current-main commit `c406b19` and locally verified. Volume 4.3.1a (duplicate canonical-column protection) is implemented, committed at current-main commit `35f0e8d`, and locally verified. Formal owner acceptance is not recorded in the current project documentation. Volume 4.3.2 type coercion is the next planned milestone; do not begin it until 4.3.1 and 4.3.1a have been reviewed and explicitly accepted.
 
 ## Implementation Rules
 
@@ -60,4 +60,4 @@ Keep Great Expectations dataset-level validation, Pydantic row-level validation,
 
 ## Current Development Gate
 
-The active gate is project-owner review and acceptance of Volume 4.3.1. The 2026-10-11 follow-up records successful local application-database migrations and supersedes the earlier authentication/missing-migration-history caveat for the current local environment. This does not establish end-to-end application behavior or production readiness. See `docs/PROJECT_STATE.md` for exact evidence. Do not treat passing tests or database migrations as owner acceptance.
+The next planned milestone is Volume 4.3.2 type coercion; it is not implemented. Its start remains gated on review and explicit owner acceptance of 4.3.1 and 4.3.1a. See `docs/PROJECT_STATE.md` for the current milestone record and the separate local database verification. Passing tests or database migrations alone do not establish owner acceptance.
