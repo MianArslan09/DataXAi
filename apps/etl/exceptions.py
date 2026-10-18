@@ -37,3 +37,37 @@ class AmbiguousColumnsError(ETLError):
 class SourceConnectionError(ETLError):
     default_message = "Could not connect to the source."
     code = "source_connection_error"
+
+
+class TypeConversionError(ETLError):
+    """Raised when a non-null value cannot be converted to the target type.
+
+    Carries enough context for diagnostics without exposing unbounded data
+    in log messages: source name, batch number, target column, row/index
+    location, and a safely truncated representation of the bad value.
+    """
+
+    default_message = "A value could not be converted to the target type."
+    code = "type_conversion_error"
+
+    def __init__(
+        self,
+        *,
+        source_name: str,
+        batch_number: int,
+        column: str,
+        row_index,
+        bad_value,
+        reason: str,
+        cause: BaseException | None = None,
+    ):
+        bad_repr = repr(bad_value)
+        if len(bad_repr) > 200:
+            bad_repr = bad_repr[:197] + "..."
+        message = (
+            f"{source_name} batch {batch_number}, column {column!r}, "
+            f"row index {row_index}: cannot convert {bad_repr} — {reason}"
+        )
+        super().__init__(message)
+        if cause is not None:
+            self.__cause__ = cause

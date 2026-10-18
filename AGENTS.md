@@ -23,7 +23,7 @@ The requested path `volume-02-environment-repository.md` is absent from the live
 - Inspect the live implementation, tests, migrations, settings, documentation, and CI before changing anything.
 - Implement one approved sub-step at a time, verify that sub-step for real, report the result, and stop for approval.
 - Never silently continue into another milestone or implement a later volume early.
-- Volume 4.3.1 (transform contract and alias mapping) is implemented at current-main commit `c406b19` and locally verified. Volume 4.3.1a (duplicate canonical-column protection) is implemented, committed at current-main commit `35f0e8d`, and locally verified. Formal owner acceptance is not recorded in the current project documentation. Volume 4.3.2 type coercion is the next planned milestone; do not begin it until 4.3.1 and 4.3.1a have been reviewed and explicitly accepted.
+- Volume 4.3.1 (transform contract and alias mapping) is implemented at current-main commit `c406b19`, locally verified, and owner accepted. Volume 4.3.1a (duplicate canonical-column protection) is implemented, committed at current-main commit `35f0e8d`, locally verified, and owner accepted. Volume 4.3.2 (Type Conversion) is IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED on 2026-10-18. Volume 4.3.3 remains closed until the project owner explicitly authorizes it; acceptance of 4.3.2 does not authorize the next step. Do not silently continue into any later milestone.
 
 ## Implementation Rules
 
@@ -60,4 +60,4 @@ Keep Great Expectations dataset-level validation, Pydantic row-level validation,
 
 ## Current Development Gate
 
-The next planned milestone is Volume 4.3.2 type coercion; it is not implemented. Its start remains gated on review and explicit owner acceptance of 4.3.1 and 4.3.1a. See `docs/PROJECT_STATE.md` for the current milestone record and the separate local database verification. Passing tests or database migrations alone do not establish owner acceptance.
+Volume 4.3.2 (Type Conversion) is IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED on 2026-10-18. Volume 4.3.1 and 4.3.1a remain owner accepted. See `docs/PROJECT_STATE.md` for the final acceptance record, verification evidence, and separate application `SOURCE_DATABASE_URL` authentication risk. Type conversion is complete; the full ETL pipeline remains incomplete. Volume 4.3.3 is closed until the project owner explicitly authorizes it.

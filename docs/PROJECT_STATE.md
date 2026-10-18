@@ -344,3 +344,166 @@ This update supersedes the 2026-10-11 milestone status above while preserving th
 - **4.3.2 — Type coercion: NEXT PLANNED MILESTONE; NOT IMPLEMENTED.** Preserve the existing prerequisite gate requiring 4.3.1 and 4.3.1a to be reviewed and explicitly accepted before starting.
 
 This status update does not claim fresh test execution, end-to-end ETL completion, or production readiness.
+
+---
+
+## Current Live Checkpoint — 2026-10-18: Volume 4.3.2 (Type Conversion)
+
+This update records the implementation and live verification of Volume 4.3.2 (Type Conversion) and supersedes the 2026-10-16 milestone status above while preserving all prior dated snapshots and historical entries as project history.
+
+### Repository Baseline
+- Repository: `D:\dataxai`; branch: `main`.
+- Base HEAD at start of milestone: `b532892` (`docs: reconcile ETL milestone status`).
+- Working tree at checkpoint: uncommitted implementation, test, verification, and documentation changes preserved for owner review (not staged or committed).
+
+### Prerequisite Acceptance Status
+- **Volume 4.3.1 (Transform contract and alias mapping):** IMPLEMENTED at commit `c406b19`, LOCALLY VERIFIED, and **EXPLICITLY OWNER ACCEPTED**.
+- **Volume 4.3.1a (Duplicate canonical-column protection):** IMPLEMENTED at commit `35f0e8d`, LOCALLY VERIFIED, and **EXPLICITLY OWNER ACCEPTED**.
+
+### Volume 4.3.2 Implementation Summary
+- `apps/etl/exceptions.py`: Added `TypeConversionError` subclassing `ETLError` (and `core.exceptions.DataXAiError`). Carries diagnostic context without unbounded data leaks: `source_name`, `batch_number`, `column`, `row_index`, truncated representation of `bad_value` (up to 200 chars), reason string, and explicit exception chaining via `cause`.
+- `apps/etl/transforms/type_converter.py`: Added `TypeConverter` class operating on `TransformedBatch` inputs (post-`AliasMapper`) yielding a new `TransformedBatch` with typed columns.
+  - `invoice_no`: Nullable string (`pd.StringDtype()`), integral float IDs converted without trailing `.0`, leading zeros preserved.
+  - `stock_code`: Nullable string (`pd.StringDtype()`), administrative codes (`POST`, `D`, `M`, etc.) preserved.
+  - `description`: Nullable string (`pd.StringDtype()`), whitespace preserved, null values retained as `pd.NA`.
+  - `quantity`: Nullable integer (`pd.Int64Dtype()`), rejects fractional/non-finite values, negative quantities preserved as valid business returns/cancellations.
+  - `invoice_date`: `datetime64[ns]`, deterministic parsing of native datetime/timestamp objects and the `YYYY-MM-DD HH:MM:SS` string format, rejects ambiguous formats, no timezone assigned or converted.
+  - `unit_price`: `object` column containing exact `decimal.Decimal` instances. Converted from float via `str()` to prevent new binary floating-point error; validates scale (`decimal_places <= 4`) and precision (`max_digits <= 12`) matching `warehouse.OrderLine.unit_price`; rejects non-finite values and overflow without rounding; preserves negative prices at this stage.
+  - `external_customer_id`: Nullable string (`pd.StringDtype()`), numeric IDs like `13085.0` converted to `"13085"` without `.0`, textual IDs with leading zeros preserved, missing values preserved as `pd.NA` (never literal string `"nan"` or `"None"`).
+  - `country`: Nullable string (`pd.StringDtype()`), nulls preserved.
+  - Batch invariants: Input immutability preserved (deep copy), row count, row order, DataFrame index, canonical column order (`TARGET_COLUMNS`), and source batch metadata (`source_name`, `batch_number`, `extracted_at`) preserved. Fails atomically on invalid non-null value without returning partial batches.
+- `apps/etl/transforms/__init__.py`: Exported `TypeConverter`.
+- `apps/etl/tests/test_transforms_type_converter.py`: Comprehensive test suite containing 82 unit and integration tests across all eight columns, edge cases, error reporting, batch behavior, and fixture pipelines.
+- `scripts/verify_type_converter_real_data.py`: Full UCI dataset streaming verification script.
+
+### Verification Evidence Supplied
+
+| Verification Check | Scope | Result | Details |
+|---|---|---|---|
+| Focused type converter suite | `apps/etl/tests/test_transforms_type_converter.py` | **82 passed** | Unit tests for all 8 target columns, null retention, error reporting, input immutability, determinism, and 18-row fixture pipelines |
+| Full pytest test suite | All registered test modules across apps | **170 passed, 7 skipped** | 88 pre-existing + 82 new tests passed. 7 Postgres integration tests cleanly skipped due to no local PostgreSQL server on port 5432 |
+| Ruff linter | `apps/`, `config/` | **PASSED** | Clean across all packages (including `B905` strict zip checks) |
+| Black formatter | `apps/`, `config/` | **PASSED** | 112 files left unchanged |
+| isort import sorter | `apps/`, `config/` | **PASSED** | Imports cleanly sorted; 11 files skipped by configuration |
+| Django system check | `python manage.py check` | **PASSED** | 0 issues identified (0 silenced) |
+| Docker Compose configuration | `docker compose config --quiet` | **PASSED** | Compose configuration valid |
+| Git whitespace check | `git diff --check` | **PASSED** | Zero trailing whitespace or merge conflict markers |
+| Real UCI dataset acceptance | `data/online_retail_II.xlsx` (1,067,371 rows) | **PASSED** | Full streaming pipeline `ExcelSource -> AliasMapper -> TypeConverter`. 22 batches, 1,067,371 rows accounted for, 0 conversion errors. 22,950 negative quantities preserved; 5 negative prices preserved; 243,007 null customer IDs preserved; 4,382 null descriptions preserved. Peak memory: 97.6 MB. Real-data script completed with both final PASS messages after setting `PYTHONIOENCODING=utf-8` |
+
+### Architectural Boundary Discipline
+- Volume 4.3.2 strictly performs type conversion.
+- No Great Expectations validation, Pydantic row validation, auto-healing, quarantine/DLQ, anomaly detection, forecasting, CLV, or NLP logic has been introduced into the ETL transform layer.
+- Negative quantities remain valid business data. Negative unit prices are preserved as data-quality faults for downstream validation to handle.
+
+### Milestone Status and Development Gate
+- **4.3.1 — Alias mapping:** IMPLEMENTED, LOCALLY VERIFIED, and OWNER ACCEPTED.
+- **4.3.1a — Duplicate canonical-column protection:** IMPLEMENTED, COMMITTED, LOCALLY VERIFIED, and OWNER ACCEPTED.
+- **4.3.2 — Type coercion:** **IMPLEMENTED and LOCALLY VERIFIED.** Pending project-owner review and formal acceptance.
+- Volume 4.3.2 is **NOT marked formally accepted**. Do not advance to Volume 4.3.3 until the owner reviews the diff and explicitly authorizes the next step.
+
+### Correctness Review Follow-up - 2026-10-18
+
+This follow-up records corrections to the uncommitted Volume 4.3.2 implementation. The preceding 82-test / 170-test and full UCI workbook results describe the earlier implementation; they are preserved as prior evidence, not fresh verification of these corrections.
+
+**IMPLEMENTED:**
+- Quantity strings now use exact Decimal parsing instead of a float intermediate. Fractional values cannot silently become integers, valid Int64 limits are preserved, and out-of-range values raise contextual `TypeConversionError` before pandas array construction.
+- Price conversion removes only insignificant trailing zeros using the Decimal tuple, without applying Decimal context rounding. Exactly representable values such as `1.23000` and zero with redundant scale are accepted; genuinely excessive scale and magnitude remain rejected. Negative quantities and negative prices remain preserved for their designated downstream handling.
+- Date conversion checks nanosecond representability per row and reports out-of-range or timezone-aware inputs through `TypeConversionError`; it does not assign or convert timezones. Integer/date array construction also wraps pandas cast exceptions, identifies the original failing row/value where available, and chains the original exception. If only the combined array fails, the message explicitly records that no individual failing row was identified. Diagnostic messages retain the bounded offending-value representation.
+- The real-data verifier now returns exit code 1 for missing input, row-accounting mismatch, or conversion errors, and propagates its result through `sys.exit(main())`. PASS/FAIL text is ASCII; paths and error details are escaped for encoding portability.
+- Added 40 regression cases across `apps/etl/tests/test_transforms_type_converter.py` and the new `apps/etl/tests/test_verify_type_converter_real_data.py`. Script tests use the existing 18-row fixture and temporary copies, not the full workbook.
+
+**LOCALLY VERIFIED** using the existing Windows `dataxaienv`:
+
+| Check | Current result |
+|---|---|
+| Focused converter and verifier tests | **122 passed** |
+| Full pytest suite | **210 passed, 7 skipped**; all skips were PostgreSQL integration tests because the configured source database at localhost:5432 was unreachable |
+| Ruff | `ruff check apps config scripts/verify_type_converter_real_data.py` completed successfully |
+| Black | `black --check` completed successfully for all four changed Python files, checked individually |
+| isort | `isort --check-only` completed successfully for all four changed Python files |
+| Windows output/exit behavior | Strict cp1252 streams cover success, row mismatch, and Unicode error details; actual subprocesses with `PYTHONIOENCODING` removed exit 1 for missing input and row mismatch |
+| Git whitespace | `git diff --check` completed successfully |
+
+The full-suite command used a process-local `PGCONNECT_TIMEOUT=3`; pytest temporary files were directed into `.pytest_cache/` because its default temporary directory was unavailable. No dependencies were installed or changed.
+
+**NOT VERIFIED** after these corrections: full 1,067,371-row UCI workbook run, live PostgreSQL behavior, Docker runtime, Django system checks, and migrations. Earlier checkpoints remain historical evidence for those scopes.
+
+All pre-existing uncommitted changes remain preserved. Nothing was staged, committed, or pushed. Volume 4.3.2 remains pending owner review and formal acceptance; Volume 4.3.3 has not begun.
+
+### Final Targeted Defect Resolution - 2026-10-18
+
+This follow-up supersedes the preceding verification limitations only where new evidence is recorded below. All earlier checkpoints remain historical evidence. It concerns Volume 4.3.2 only and does not establish owner acceptance.
+
+**IMPLEMENTED:**
+- `_is_null()` explicitly distinguishes Decimal signaling NaN from quiet NaN before calling pandas. Signaling NaN raises `TypeConversionError` with source, batch, target column, index, and offending-value context across all eight columns, including text fields. Ordinary nulls and quiet Decimal/NumPy NaN retain their established null semantics. No broad exception suppression was added.
+- Python floating prices use `str()`; NumPy floating prices use `np.format_float_scientific(..., unique=True, trim="-")` at their original dtype. Price-column iteration uses the pandas array to avoid widening float32 before conversion. The shortest round-trip text defines decimal intent; original source precision already lost in a floating scalar cannot be recovered. Meaningful digits beyond scale 4 or integral precision 8 remain rejected, without rounding. Infinities remain rejected; quiet NaN remains null.
+- Compatible Decimal instances retain their supplied representation and identity, including `Decimal("10.0000")`. Only insignificant trailing zeros required to achieve exact scale compatibility are removed, without applying Decimal context rounding. Negative quantities and negative prices remain preserved.
+- The real-data verifier now reports extracted input rows/batches separately from converted output totals and checks negative-quantity, negative-price, null-customer, and null-description counts against each actual source batch. Preservation failures terminate verification unsuccessfully.
+- Added regressions for signaling/quiet Decimal NaN in every column, input immutability, float32/float64 typed and object columns, meaningful extra digits, non-finite prices, precision boundaries, Decimal representation retention, and verifier preservation failures. Added a real PostgreSQL -> AliasMapper -> TypeConverter comparison with the existing CSV fixture and per-batch invariants.
+
+**LOCALLY VERIFIED / POSTGRES VERIFIED:**
+
+| Check | Final result |
+|---|---|
+| Focused TypeConverter and verifier tests | **186 passed, 0 skipped**; process exit code **0** |
+| Complete pytest suite | **281 passed, 0 skipped**; process exit code **0** |
+| Dedicated PostgreSQL integration suite | **8 passed, 0 skipped**; process exit code **0**, including the new source-to-converter comparison |
+| Ruff | `ruff check .` completed with exit code **0** |
+| Black | Configured check over **117 repository Python source files** completed with exit code **0** |
+| isort | Configured check over the same source files completed with exit code **0** |
+| Git whitespace | `git diff --check` completed with exit code **0** |
+
+Tests used the existing `dataxaienv` and the repository's existing CI `TEST_SOURCE_DATABASE_URL`, supplied only to the verification process for source PostgreSQL on `localhost:5433`, with `PGCONNECT_TIMEOUT=3`. The source database was read successfully and contained the existing 18-row `raw_transactions` fixture. Localhost access was blocked in the sandbox, so the database-backed suites ran in the authorized local environment. No fixture reseeding, infrastructure changes, credential changes, or persistent environment changes were performed. Earlier seven-test skip reports did not establish stopped containers: the test helper defaults to the application database port 5432, catches all connection failures as skips, and does not read Django's `SOURCE_DATABASE_URL` setting.
+
+Quality-check file discovery excluded ignored virtual-environment/test-cache copies and applied the existing migration exclusion. No quality configuration or dependencies were changed.
+
+**UCI VERIFIED:** The full `data/online_retail_II.xlsx` workbook was streamed once through `ExcelSource -> AliasMapper -> TypeConverter` after the final code and regression checks passed. Both sheets were processed. The process completed with both ASCII PASS messages under the default Windows output encoding, with `PYTHONIOENCODING` explicitly unset for that process.
+
+| Real-dataset check | Actual final result |
+|---|---|
+| Extracted input rows / converted output rows | **1,067,371 / 1,067,371** |
+| Input batches / output batches | **22 / 22** |
+| Conversion errors | **0** |
+| Negative quantities preserved | **22,950** |
+| Negative prices preserved | **5** |
+| Null customer IDs preserved | **243,007** |
+| Null descriptions preserved | **4,382** |
+| Script-measured elapsed time / tracemalloc peak | **540.4 seconds / 97.6 MB**; traced Python allocations, not total process memory |
+| Direct process exit code | **0**, captured immediately from PowerShell `$LASTEXITCODE` and returned by the calling command |
+
+Each source batch's four preservation counts were asserted against its converted output. The successful run therefore verifies the current implementation, not merely the prior historical UCI checkpoint. It establishes extraction/mapping/conversion only; no warehouse load or later milestone was run.
+
+**Existing configuration risk:** A read-only probe using the application's existing `.env` `SOURCE_DATABASE_URL` credentials against the host-mapped source port failed authentication. The existing CI test credentials connected successfully. `.env` and all database credentials remain unchanged; passing source integration tests do not verify the application's differently configured connection.
+
+Files changed in this pass: `apps/etl/transforms/type_converter.py`, `apps/etl/tests/test_transforms_type_converter.py`, `apps/etl/tests/test_verify_type_converter_real_data.py`, `scripts/verify_type_converter_real_data.py`, and this checkpoint file. All other pre-existing changes remain preserved. Nothing is staged, committed, or pushed. Volume 4.3.2 remains pending owner review and formal acceptance; Volume 4.3.3 has not begun.
+
+---
+
+## Final Owner Acceptance Record - 2026-10-18: Volume 4.3.2 (Type Conversion)
+
+The project owner explicitly FORMALLY ACCEPTED Volume 4.3.2 (Type Conversion) on 2026-10-18. Current milestone status: **IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED**.
+
+This dated record supersedes earlier statements that 4.3.2 was awaiting owner review or formal acceptance. All previous checkpoints, including their verification results and limitations at the time, remain preserved as historical evidence. Acceptance is based on the owner's explicit instruction, not inferred from passing tests.
+
+### Final Verification Evidence Accepted
+
+| Check | Recorded final evidence |
+|---|---|
+| Focused TypeConverter and verifier tests | **186 passed, 0 skipped** |
+| Complete pytest suite | **281 passed, 0 skipped** |
+| PostgreSQL integration suite | **8 passed, 0 skipped**, using the existing source database on `localhost:5433` |
+| Full UCI Retail II verification | **1,067,371 input rows and 1,067,371 output rows**, **22 input/output batches**, **0 conversion errors**, direct process exit code **0** |
+
+The final UCI run also preserved 22,950 negative quantities, 5 negative prices, 243,007 null customer IDs, and 4,382 null descriptions, with Windows-compatible output and no `PYTHONIOENCODING` override. Detailed execution and quality-check evidence remains in the preceding final targeted defect-resolution checkpoint. These are recorded results from that verification pass; no tests or dataset verification were rerun for this documentation-only acceptance update.
+
+### Separate Open Configuration Risk
+
+The application's existing `.env` `SOURCE_DATABASE_URL` credentials failed authentication against the host-mapped source database. The successful PostgreSQL tests used the existing CI `TEST_SOURCE_DATABASE_URL` on `localhost:5433`. The application-configured connection remains unverified and the authentication issue remains open; credentials and `.env` are unchanged. This separate configuration risk does not revoke or expand the owner's acceptance of Volume 4.3.2.
+
+### Scope and Next Development Gate
+
+Volume 4.3.2 type conversion is complete and formally accepted. The full ETL pipeline remains incomplete: later transformation work, loading, PipelineRun orchestration, and full end-to-end pipeline verification are not established by this acceptance.
+
+**Volume 4.3.3 remains closed until the project owner explicitly authorizes it.** Formal acceptance of 4.3.2 does not authorize implementation of 4.3.3 or any later milestone.
+
+This acceptance update changes only `docs/PROJECT_STATE.md`, `docs/PROJECT_ROADMAP.md`, `AGENTS.md`, and `.github/copilot-instructions.md`. Implementation, tests, configuration, dependencies, and the Excel volume tracker remain untouched. Existing modified and untracked work remains preserved; nothing is staged, committed, or pushed.

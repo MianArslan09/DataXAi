@@ -40,18 +40,21 @@ The supplied filename `volume-02-environment-repository.md` is not present in th
 
 ## Volume 4.3 Submilestone Status
 
-**4.3.1 — Transform contract and alias mapping: IMPLEMENTED and LOCALLY VERIFIED.** Current-main commit: `c406b19`. Formal owner acceptance is not confirmed by the current project records; see `docs/PROJECT_STATE.md`.
-- **4.3.1a — Duplicate canonical-column protection: IMPLEMENTED, COMMITTED, and LOCALLY VERIFIED.** Current-main commit: `35f0e8d`. Formal owner acceptance is not separately recorded in the current project records.
-- **4.3.2 — Type coercion: NEXT PLANNED MILESTONE; NOT IMPLEMENTED.** Do not begin until 4.3.1 and 4.3.1a are reviewed and explicitly accepted.
+**4.3.1 — Transform contract and alias mapping: IMPLEMENTED, LOCALLY VERIFIED, and OWNER ACCEPTED.** Current-main commit: `c406b19`.
+- **4.3.1a — Duplicate canonical-column protection: IMPLEMENTED, COMMITTED, LOCALLY VERIFIED, and OWNER ACCEPTED.** Current-main commit: `35f0e8d`.
+- **4.3.2 — Type Conversion: IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED on 2026-10-18.** See the final dated acceptance record and verification evidence in `docs/PROJECT_STATE.md`.
+
+Volume 4.3.3 remains closed until the project owner explicitly authorizes it. Acceptance of 4.3.2 does not authorize the next sub-step.
 
 Remaining Volume 4.3 scope (planned):
-- type coercion
 - explicit date normalization/timezone policy
 - ETL-level business rules
 
 Volume 4.3 must not implement Great Expectations validation, the Pydantic Validation Engine, auto-healing, anomaly detection, forecasting, CLV, or NLP/chatbot.
 
-Volume 4.3.1 implements structural alias mapping only. Later transform behavior and the full Volume 4 ETL pipeline remain planned; Volume 4 is not complete and end-to-end loading has not been verified.
+Volume 4.3.1 implements structural alias mapping only. Volume 4.3.2 implements type conversion. Later transform behavior and the full Volume 4 ETL pipeline remain planned; Volume 4 is not complete and end-to-end loading has not been verified.
+
+Separate configuration risk: the application's existing `SOURCE_DATABASE_URL` credentials failed authentication. PostgreSQL verification used the existing CI `TEST_SOURCE_DATABASE_URL` on `localhost:5433`; it does not establish that the application-configured connection works. This risk remains open and does not change the owner's acceptance of the type-conversion milestone.
 
 Business rules:
 - negative quantity is valid
