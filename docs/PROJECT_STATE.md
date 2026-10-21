@@ -507,3 +507,391 @@ Volume 4.3.2 type conversion is complete and formally accepted. The full ETL pip
 **Volume 4.3.3 remains closed until the project owner explicitly authorizes it.** Formal acceptance of 4.3.2 does not authorize implementation of 4.3.3 or any later milestone.
 
 This acceptance update changes only `docs/PROJECT_STATE.md`, `docs/PROJECT_ROADMAP.md`, `AGENTS.md`, and `.github/copilot-instructions.md`. Implementation, tests, configuration, dependencies, and the Excel volume tracker remain untouched. Existing modified and untracked work remains preserved; nothing is staged, committed, or pushed.
+
+---
+
+## Cancellation-Enrichment Review - 2026-10-20: Volume 4.3.3 Substep
+
+Volume 4.3.3 covers the broader **Dates and Business Rules** work. The project owner explicitly approved implementation of **BR-001 through BR-004 cancellation-marker enrichment only**. This authorization supersedes earlier closed-gate wording only for that substep; it is not formal acceptance of the implementation.
+
+**Status:** Cancellation enrichment is **IMPLEMENTED, TESTED, and LOCALLY VERIFIED** within the scope of the owner-provided execution evidence below. Formal substep acceptance remains pending owner confirmation. The entire Volume 4.3.3 milestone is neither complete nor formally accepted. Explicit date/timezone normalization remains pending design and implementation.
+
+### Resumed Repository Baseline and Audit
+
+- Branch `main`, HEAD `5aa0bb8` (`fix(ci): defer incompatible BTYD dependency`), following accepted type-conversion commit `86ab08a`.
+- Existing changes at resume: modified `apps/etl/transforms/__init__.py`; untracked `apps/etl/transforms/business_rules.py`, `apps/etl/tests/test_transforms_business_rules.py`, and `DataXAi_4.3.3_Code_Review.txt`. All were preserved. The text file contains source/test excerpts; the independent review conclusion below is attributed to the owner's report.
+- `git diff --check` completed with exit code 0 before documentation changes.
+- The resumed source audit found no blocking contract violations. No implementation or test changes were necessary, and no test suite or dataset verification was rerun during this documentation reconciliation.
+
+### Implemented Contract and Preservation
+
+- `BusinessRules.apply(TransformedBatch) -> TransformedBatch` follows `AliasMapper -> TypeConverter`. The existing Transform protocol, AliasMapper, TypeConverter, warehouse schema, and exception hierarchy are unchanged.
+- **BR-001:** Known nonblank strings use strict uppercase `C` prefix matching. No trimming, case conversion, quantity inference, or source-value rewriting occurs.
+- **BR-002:** Null, empty, and whitespace-only invoice identifiers retain their rows and receive `pd.NA` in a pandas nullable `boolean` column. Ordinary null sentinels and quiet NaN remain unknown; signaling Decimal NaN is rejected contextually.
+- **BR-003:** An existing `is_cancellation` column raises `AmbiguousColumnsError` before enrichment can overwrite it.
+- **BR-004:** Unexpected non-null invoice types raise `ETLError` with source, batch, column, row index, and a value representation bounded to 200 characters. No implicit conversion occurs.
+- Required target-column presence and duplicate `invoice_no` columns are checked at the point of use. Missing and ambiguous schemas reuse existing ETL exceptions.
+- A new DataFrame receives exactly one appended field, assigned positionally to preserve duplicate indexes. Original columns, values, dtypes, Decimal representations, datetime values, row order/count, indexes, and source/batch/extraction metadata are preserved. Empty batches and deterministic equivalent inputs are covered. Failures return no partial result.
+- CSV and Excel fixture tests exercise the full source -> alias -> type conversion -> enrichment sequence: 18 retained rows, 5 true markers, 13 false, 0 unknown, and the repeated record retained. Tests also preserve negative quantities/prices, missing customer IDs/descriptions, administrative codes, extra columns, and input immutability.
+- No validation-engine rules, healing, quarantine, loading, date/timezone normalization, return/refund classification, or analytics logic was introduced.
+
+### Owner-Provided Local Verification Evidence
+
+The project owner reported the following checks after the usage-limit interruption. These are **user-provided local execution results**, not fresh executions by the resumed agent.
+
+| Check | Reported result | Exit code |
+|---|---|---|
+| Focused BusinessRules suite | **47 passed** | **0** |
+| Full pytest suite | **320 passed, 8 skipped**, elapsed **542.36 seconds** | **0** |
+| Ruff on the three affected Python files | Passed | **0** |
+| Black on the three affected Python files | Passed | **0** |
+| isort on the three affected Python files | Passed | **0** |
+| Independent source review | Completed; no blocking contract violations reported | Not applicable |
+
+Earlier agent-run results remain distinct: the final focused run had 47 passed, and the ETL regression run had 295 passed, 8 skipped, both exit code 0. An attempted local rerun of the ETL suite was not executed because automatic approval review could not complete after a usage limit was reached. That review failure was not a determination that the action was unsafe. No PostgreSQL success is inferred from either skipped run.
+
+### Eight PostgreSQL Skips and Verification Limits
+
+The existing skip gates cover these eight tests:
+
+| Module / class | Test |
+|---|---|
+| `test_sources_postgres.py::TestPostgresSource` | `test_valid_query_yields_batches_with_canonical_columns` |
+| Same class | `test_batching_respects_batch_size` |
+| Same class | `test_connection_lifecycle_engine_and_connection_cleaned_up` |
+| Same class | `test_connection_failure_raises_source_connection_error` |
+| Same class | `test_extract_without_context_manager_raises` |
+| `test_sources_contract.py::TestCrossSourceContract` | `test_all_three_sources_produce_the_same_shape` |
+| `test_transforms_alias.py::TestTransformIsSourceAgnostic` | `test_postgres_batches_yield_the_same_shape_and_keys_as_csv_and_excel` |
+| `test_transforms_type_converter.py::TestIntegrationWithFixtures` | `test_postgres_converter_matches_csv_fixture_and_preserves_batches` |
+
+`_postgres_available()` attempts `SELECT 1` and catches every connection exception as unavailable. Tests read process variable `TEST_SOURCE_DATABASE_URL`; absent that variable, their fallback uses localhost:5432, while the established CI source-test configuration uses localhost:5433. They do not use Django's application `SOURCE_DATABASE_URL`. Two source error/lifecycle tests are also skipped because the gate is applied to their entire class.
+
+The skip count alone does not establish stopped containers, authentication failure, or sandbox denial in the owner's run. Its precise connection failure and current database availability were not independently probed during this resumed audit. All eight gates concern existing source/alias/type-conversion coverage; none skips a new BusinessRules test. Direct PostgreSQL -> BusinessRules integration remains NOT VERIFIED. CSV/Excel and typed-batch evidence is sufficient for owner review of this source-independent substep, without claiming PostgreSQL or full-pipeline completion.
+
+If the existing source database and fixture are available, a focused rerun of the eight tests is justified to close the environment coverage gap. From the repository root, with the existing CI-equivalent `TEST_SOURCE_DATABASE_URL` already supplied to the process for localhost:5433, the minimal selection is:
+
+```powershell
+$env:PGCONNECT_TIMEOUT = '3'
+.\dataxaienv\Scripts\python.exe -m pytest `
+  apps/etl/tests/test_sources_postgres.py `
+  apps/etl/tests/test_sources_contract.py `
+  apps/etl/tests/test_transforms_alias.py `
+  apps/etl/tests/test_transforms_type_converter.py `
+  -k 'TestPostgresSource or test_all_three_sources_produce_the_same_shape or test_postgres' `
+  -q -rN --tb=short
+$testExitCode = $LASTEXITCODE
+Write-Output "Exit code: $testExitCode"
+```
+
+This proposed command was not executed here. `-rN` avoids printing skip reasons that embed the configured connection URL. Review passed/skipped counts as well as exit code: eight skips can still produce exit code 0. No credential, database-content, Docker, CI, or `.env` changes are authorized by this proposal. The separate previously recorded application `SOURCE_DATABASE_URL` authentication risk remains open.
+
+### Remaining Gates
+
+- Formal owner acceptance of cancellation enrichment is pending.
+- Unknown staged markers still require an explicit downstream policy before loading into non-nullable `OrderLine.is_cancellation`; this substep does not load records or substitute `False`.
+- Explicit date/timezone normalization policy, design, and implementation remain pending. TypeConverter date behavior is unchanged.
+- The million-row UCI enrichment checkpoint was not run and requires separate owner authorization. Historical 4.3.2 UCI verification does not verify the new enrichment.
+- This resumed pass updates only `docs/PROJECT_STATE.md` and `docs/PROJECT_ROADMAP.md`, preserving historical checkpoints and existing working-tree files. The Excel tracker is unchanged. Nothing is staged, committed, or pushed; no later milestone is authorized.
+
+## Dates and Business Rules Implementation - 2026-10-20: Volume 4.3.3
+
+This checkpoint supersedes the preceding pending-date gate without rewriting its
+historical evidence. The owner explicitly authorized DT-001 through DT-007 and,
+in the resumed-task instruction, confirmed that BR-001 through BR-004 cancellation
+enrichment has already been formally owner accepted. The date implementation and
+the complete Volume 4.3.3 are **not formally owner accepted** by this record.
+
+### Baseline and preserved work
+
+- Branch `main`, HEAD `5aa0bb8` (`fix(ci): defer incompatible BTYD dependency`),
+  following accepted type-conversion commit `86ab08a`; unchanged throughout.
+- Initial tracked modifications: transform exports, this state document, and the
+  roadmap. Existing untracked files: `business_rules.py`, its 47-test module, and
+  `DataXAi_4.3.3_Code_Review.txt`.
+- Existing cancellation implementation/tests and review text were preserved;
+  their SHA-256 hashes remained unchanged. Accepted alias mapper, converter,
+  source implementations, Transform protocol, settings, dependencies, migrations,
+  credentials, and Excel tracker were not modified.
+- The older AGENTS/Copilot gate says 4.3.3 needs explicit owner authorization.
+  The current request supplies that authorization; it does not authorize 4.4.
+
+### Implementation and contract
+
+Status: **IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED** for this
+transformation scope. See [DATE_NORMALIZATION.md](DATE_NORMALIZATION.md) for the
+complete supported grammar, interfaces, profile policy, and limitations.
+
+New public interface:
+
+```python
+DateNormalizer(profile: SourceDateProfile | None = None)
+DateNormalizer.apply(batch: TransformedBatch) -> DateInterpretationResult
+```
+
+The result exposes safe typed/enriched records, unresolved original alias-mapped
+records, positional path membership, structured issues, original date evidence,
+timezone status/provenance, source profile, and verifiable row accounting.
+`DateEvidence.iso_value()` supplies deterministic ISO serialization.
+
+| Contract | Implementation and evidence |
+| --- | --- |
+| DT-001 | Immutable source profile; bounded automatic recognition; ambiguous slash dates require explicit date-order provenance. No country, filename, locale, or Django-timezone inference; no learned cross-batch convention. |
+| DT-002 | Explicit offsets and trusted IANA source zones yield UTC-aware instants; unknown source zones retain naive clocks with `TIMEZONE_UNKNOWN`. Exact Karachi/offset/day-boundary tests. |
+| DT-003 | Strict year-first/ISO, slash DMY/MDY, native Python/pandas/NumPy and Excel datetime input; 1–9 fractional digits. Explicit date-only, conflict, range, and unsupported-format handling. |
+| DT-004 | Missing/invalid/ambiguous/unsupported dates and DST folds/gaps retain rows and issues. Invalid configuration/schema is atomic. Existing non-date conversion errors remain atomic on both paths. |
+| DT-005 | Original date, local clock, UTC instant, status/origin, shared profile provenance, source, batch, positional identity, and original index label remain accessible. Duplicate-index tests use positions, not labels. |
+| DT-006 | Disjoint safe/unresolved paths exactly cover input positions, with preserved metadata/order/indexes. Private naive UTC-clock bridge prevents offset reinterpretation; converter behavior remains unchanged. |
+| DT-007 | Typed frozen profile/evidence/issue/result contracts; explicit `check_accounting`; missing dates generate `MISSING_DATE` and never enter the safe path. |
+| BR-001–BR-004 | Existing component reused after conversion for eligible safe rows; unchanged strict uppercase-C/unknown-marker/collision/typed-input behavior. All 47 existing BusinessRules tests pass. |
+
+The final safe `invoice_date` column deliberately uses object dtype containing
+typed Timestamp scalars, supporting both UTC-aware and timezone-unknown rows.
+The private converter bridge is never returned as the final date-aware batch.
+Unresolved rows retain original fields and receive no implied repair or load
+readiness. Negative quantities/prices, missing identifiers, and duplicates are
+not cleaned. Extra columns are carried around the converter's field selection.
+
+During development, a regression exposed a native aware datetime constructed
+inside a DST gap; preserving its supplied wall clock before pandas conversion
+fixed controlled issue classification. Exact minimum nanosecond text needed
+full-precision construction rather than truncation to microseconds first.
+Neither fix changes an accepted module. A new synthetic integration assertion
+was corrected to the sources' established zero-based batch numbering.
+
+### Verification attribution and PostgreSQL skip investigation
+
+Historical owner-provided resumed-task evidence: 146 focused tests passed,
+one skipped, 5.52 seconds, exit 0; Ruff/Black/isort and Git whitespace checks
+passed (Black reported seven files unchanged). This is attributed to the owner,
+not presented as an agent execution or a substitute for final-state verification.
+
+The focused skipped test is
+`test_transforms_dates.py::test_postgres_date_pipeline_matches_csv_without_guessing_zone`.
+It uses the existing `requires_postgres` gate from `test_sources_postgres.py`.
+That gate performs `SELECT 1`, catches connection exceptions, and skips on failure.
+Its default URL points at localhost:5432; the established CI source-test URL is
+localhost:5433 and must be provided through `TEST_SOURCE_DATABASE_URL`.
+The owner's exact connection exception is not recoverable from the skip count.
+
+In this session, the sandbox probe of the correct source connection failed with
+Windows socket denial 10013. The authorized execution outside that restriction
+used the existing CI source-test configuration in process memory, without
+printing secrets or changing `.env`, credentials, fixture data, or infrastructure.
+All nine PostgreSQL-gated tests then passed, including date normalization and
+cancellation enrichment. The application `SOURCE_DATABASE_URL` authentication
+risk is separate and remains unresolved.
+
+Final agent-executed checks against the completed Python implementation:
+
+| Check | Actual result | Exit |
+| --- | --- | --- |
+| Focused date, date-verifier, BusinessRules, TypeConverter, and existing verifier regressions | 342 passed, 0 skipped; 21.44 s | 0 |
+| Complete pytest suite | 437 passed, 0 skipped; 31.49 s | 0 |
+| Focused PostgreSQL source/alias/converter/date integration | 9 passed, 291 deselected; 10.31 s | 0 |
+| Ruff, repository Python files | All checks passed; 124 files in scope | 0 |
+| Black check | 124 files would remain unchanged | 0 |
+| isort check | Passed for the same 124 files | 0 |
+| `git diff --check` | No whitespace errors after documentation reconciliation | 0 |
+
+The dedicated PostgreSQL run preceded two additional synthetic CSV/Excel tests;
+the subsequent focused and full runs include those tests and all PostgreSQL
+gates. The final new date suite contains 100 tests and its verifier suite nine.
+The full application suite uses the existing SQLite test settings; PostgreSQL
+verification specifically concerns the external source integration.
+
+An initial PostgreSQL command used an incorrect alias-test filename and exited 4
+without running tests; the corrected command passed. Preliminary sandbox runs
+had PostgreSQL skips; these are not counted as passes. No skips remain in the
+final configured focused/full runs.
+
+Executed pytest arguments (using `dataxaienv\Scripts\python.exe -m pytest`):
+
+```powershell
+# Existing CI TEST_SOURCE_DATABASE_URL supplied to this process; PGCONNECT_TIMEOUT=3.
+# Source credentials were read from the existing CI configuration, never printed.
+.\dataxaienv\Scripts\python.exe -m pytest `
+  apps/etl/tests/test_transforms_dates.py `
+  apps/etl/tests/test_verify_dates_real_data.py `
+  apps/etl/tests/test_transforms_business_rules.py `
+  apps/etl/tests/test_transforms_type_converter.py `
+  apps/etl/tests/test_verify_type_converter_real_data.py `
+  -q -rN -o addopts='' --basetemp=.pytest_cache/dt433-focused-verified
+
+.\dataxaienv\Scripts\python.exe -m pytest `
+  apps/etl/tests/test_sources_postgres.py `
+  apps/etl/tests/test_sources_contract.py `
+  apps/etl/tests/test_transforms_alias.py `
+  apps/etl/tests/test_transforms_type_converter.py `
+  apps/etl/tests/test_transforms_dates.py `
+  -k 'postgres or all_three_sources' -q -rN -o addopts='' `
+  --basetemp=.pytest_cache/dt433-postgres
+
+.\dataxaienv\Scripts\python.exe -m pytest -q -rN --tb=short `
+  --basetemp=.pytest_cache/dt433-full
+```
+
+Commands ran through a Python subprocess wrapper that supplied the existing
+CI test URL and redacted it from captured output. Each return code was captured
+and printed. `-rN` prevents the existing skip reason from printing a URL.
+Quality checks used the unique Python paths returned by
+`git ls-files --cached --others --exclude-standard -- '*.py'`, excluding
+`/migrations/` per project configuration:
+`python -m ruff check <paths>`, `python -m black --check --workers 1 <paths>`,
+and `python -m isort --check-only <paths>`. The installed ignored environment
+was not scanned or changed.
+
+### Full UCI Retail II transformation verification
+
+Status: **UCI VERIFIED**, transformation-only, using the available ignored
+`data/online_retail_II.xlsx` (45,622,278 bytes), with no source timezone profile.
+The earlier scan's terminal session became unavailable during interruption;
+its last captured progress was batch 7, and no final result/exit code was
+available. A read-only process check confirmed it was no longer running.
+That incomplete checkpoint was rerun once with retained output; it is not
+counted as a successful prior scan.
+
+Executed:
+
+```powershell
+.\dataxaienv\Scripts\python.exe scripts/verify_dates_real_data.py |
+  Tee-Object -FilePath .pytest_cache/dt433-uci-resumed.log
+$verificationExitCode = $LASTEXITCODE
+"UCI verification exit code: $verificationExitCode" |
+  Tee-Object -FilePath .pytest_cache/dt433-uci-resumed.log -Append
+exit $verificationExitCode
+```
+
+Actual completed output: `PASS: accounting and preservation verified`;
+**process exit code 0**, elapsed **167.513 seconds**.
+
+| Measurement | Observed count |
+| --- | ---: |
+| Extracted rows | 1,067,371 |
+| Input/output batches | 22 / 22 |
+| Safe-date rows | 1,067,371 |
+| Unresolved-date rows | 0 |
+| Date issues, all categories | 0 |
+| UTC-normalized timestamps | 0 |
+| Timezone-unknown naive timestamps | 1,067,371 |
+| Cancellation True | 19,494 |
+| Cancellation False | 1,047,877 |
+| Cancellation unknown | 0 |
+| Negative quantities preserved | 22,950 |
+| Negative prices preserved | 5 |
+| Missing customer identifiers preserved | 243,007 |
+| Missing invoice identifiers | 0 |
+| Missing descriptions preserved | 4,382 |
+| Conversion/verification errors | 0 |
+
+The verifier checked per-batch input immutability, exact positional partition,
+metadata/index preservation, original date evidence, output timestamp/status
+consistency, independent strict-prefix cancellation markers, and preservation
+counts. Default expected row/batch accounting passed. It retained only bounded
+batches, not the full workbook as a DataFrame. The real workbook contained no
+unresolved dates in this run; synthetic tests establish the unresolved path.
+
+The verifier did not enable `--trace-memory`: its JSON correctly reports no
+Python-traced allocation peak and no internally measured process RSS. A separate
+read-only Windows process-counter sample late in the run observed the actual
+Python worker at **267,411,456 bytes working set** (about 255 MiB), with
+**300,220,416 bytes peak working set up to that sample** (about 286 MiB).
+This is an OS working-set observation, not a Python allocation measurement or
+a claimed final-run peak. The small virtual-environment launcher was separate.
+The output uses ASCII PASS/FAIL and passed a strict Windows cp1252 regression
+without requiring `PYTHONIOENCODING`.
+
+### Final scope, limitations, and next action
+
+Files added for date work:
+
+- `apps/etl/transforms/date_contract.py`: immutable configuration, issues,
+  evidence, statuses, positional lineage, and result/accounting contract.
+- `apps/etl/transforms/date_normalizer.py`: controlled parsing/localization,
+  two-path partition, private converter bridge, and existing BusinessRules reuse.
+- `apps/etl/tests/test_transforms_dates.py`: 100 focused date/integration cases.
+- `apps/etl/tests/test_verify_dates_real_data.py`: nine verifier regressions,
+  including failure exits, corruption detection, and Windows-compatible output.
+- `scripts/verify_dates_real_data.py`: bounded transformation-only verification.
+- `docs/DATE_NORMALIZATION.md`: public contract and source-boundary limitations.
+
+Existing files updated: `apps/etl/transforms/__init__.py` for additive exports,
+`docs/PROJECT_STATE.md` for preserved historical and new execution evidence, and
+`docs/PROJECT_ROADMAP.md` for the current gate. Existing cancellation files and
+the owner's review text remain untouched and untracked, as initially found.
+Verification logs and pytest artifacts are confined to ignored `.pytest_cache`.
+
+No unresolved blocking defect was found in the approved transformation scope.
+Technical implementation is ready for owner acceptance review, with these
+explicit limits:
+
+- Source timezone remains unknown for UCI; safe interpretation is not warehouse
+  readiness. Loading unknown timezones/nullable cancellation markers needs its
+  own approved policy. No Volume 4.4 work was performed.
+- Native midnight datetimes cannot reveal whether an upstream Excel reader
+  discarded date-only cell metadata. This adapter never invents midnight from
+  date-only values it actually receives; source precision evidence may need a
+  future source-contract extension if that distinction is required.
+- Positional lineage is stable within the extraction's source and batch, not
+  a persistent cross-run identifier. No database persistence was added.
+- IANA timezone interpretation depends on installed timezone data; profiles
+  require source evidence rather than assumptions. No dependency was changed.
+- Frozen result contracts contain mutable DataFrames, matching existing batch
+  architecture; consumers must preserve them or recheck accounting.
+- Application `SOURCE_DATABASE_URL` authentication remains a separate open risk.
+  Successful source-test PostgreSQL runs do not resolve that configuration.
+
+BR-001 through BR-004 are owner accepted as confirmed in the current instruction.
+DT-001 through DT-007 are implemented and verified as recorded above; formal
+acceptance of the date work and entire Volume 4.3.3 remains pending owner review.
+No staging, commit, push, deployment, Excel-tracker edit, or later milestone is
+authorized or performed. Next action: owner review and acceptance decision.
+
+
+## Formal Owner Acceptance - 2026-10-21: Volume 4.3.3
+
+The project owner formally accepted **Volume 4.3.3 — Dates and Business Rules**
+on **2026-10-21**, covering **DT-001 through DT-007** and **BR-001 through BR-004**.
+Status: **IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED**.
+Implementation commit: **`6df1e1b`** (`feat(etl): implement dates and business rules (4.3.3)`),
+on branch **`feat/etl-4.3.3`**. The commit and branch were inspected during this
+reconciliation; no merge or push is implied by this record.
+
+This is a record of the owner's completed acceptance, not another acceptance
+review. It supersedes the current gates expressed by earlier pending-acceptance
+statements. All previous checkpoints remain unchanged as historical evidence.
+
+### Previously Recorded Verification Evidence
+
+The preserved 2026-10-20 implementation checkpoint records:
+
+- Focused transformation/verifier regressions: **342 passed, 0 skipped**, exit 0.
+- Full pytest suite: **437 passed, 0 skipped**, exit 0.
+- Dedicated PostgreSQL integration: **9 passed**, exit 0.
+- Ruff, Black, and isort: passed across **124 repository Python files**, exit 0.
+- Full UCI Retail II transformation verification: **1,067,371 rows across 22
+  batches**, all on the safe-date path; **0 unresolved rows, 0 date issues,
+  0 conversion/verification errors**, exit **0**, elapsed **167.513 seconds**.
+- UCI timezone status: **1,067,371 timezone-unknown naive timestamps**, **0 UTC
+  normalized**; no source timezone was invented. Cancellation counts: **19,494
+  true**, **1,047,877 false**, **0 unknown**. The checkpoint retains the detailed
+  preservation counts and memory-measurement limitations.
+
+These are existing execution results, not fresh verification performed for this
+acceptance record. No tests, quality-tool suites, or UCI dataset scan were rerun.
+This documentation-only reconciliation uses `git diff --check` for whitespace
+verification and does not change implementation or tests.
+
+### Remaining Boundaries
+
+Acceptance completes the approved Dates and Business Rules milestone, not the
+full ETL pipeline. Unknown source timezones and nullable cancellation markers
+still need an explicitly approved downstream loading policy. Previously recorded
+source-precision and lineage limitations remain applicable. The separate
+application `SOURCE_DATABASE_URL` authentication risk remains open; successful
+source-test PostgreSQL verification does not resolve it.
+
+Volume 4.4 and all later milestones remain closed until explicit owner
+authorization. This reconciliation updates only `docs/PROJECT_STATE.md`,
+`docs/PROJECT_ROADMAP.md`, `AGENTS.md`, and `.github/copilot-instructions.md`.
+It does not stage, commit, push, switch branches, merge, or edit the Excel tracker.
