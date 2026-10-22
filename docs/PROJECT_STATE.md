@@ -895,3 +895,146 @@ Volume 4.4 and all later milestones remain closed until explicit owner
 authorization. This reconciliation updates only `docs/PROJECT_STATE.md`,
 `docs/PROJECT_ROADMAP.md`, `AGENTS.md`, and `.github/copilot-instructions.md`.
 It does not stage, commit, push, switch branches, merge, or edit the Excel tracker.
+
+
+## Source PostgreSQL Configuration Stabilization - 2026-10-22
+
+Authorized configuration maintenance after accepted Volume 4.3.3; no Volume 4.4
+loading or accepted transformation logic was changed. Baseline was clean on
+`feat/etl-4.3.3`, HEAD `9cb8184` (formal acceptance documentation).
+
+The recurring skip cause was the test helper's independent port-5432 fallback,
+which bypassed application source configuration. The local application source
+URL also used Docker addressing and a password inconsistent with the running
+source role. Healthy containers alone did not validate these client settings.
+
+`config/source_database.py` now builds a SQLAlchemy URL from source-only component
+settings, encoding password special characters. A nonempty explicit source URL
+remains authoritative. Tests use a decouple-resolved explicit test URL or the
+configured application source URL, never the application database fallback.
+Invalid explicit test URLs fail with a sanitized message; operational connection
+failures still skip with a credential-free reason. Probe engines are disposed
+and connections have a three-second timeout.
+
+The ignored local `.env` received only six source keys: host, port, database,
+user, the verified existing password, and an empty URL override. Unrelated values
+were preserved. No password rotation was performed. Compose now requires that
+same password explicitly, and sets source_db:5432 for web/worker/beat, overriding
+Windows source addressing. Local defaults use 127.0.0.1:5433. See
+[SOURCE_DATABASE_CONFIGURATION.md](SOURCE_DATABASE_CONFIGURATION.md) for
+precedence, examples, and operational limits.
+
+### Actual verification
+
+Verification child processes removed inherited SOURCE_* and
+TEST_SOURCE_DATABASE_URL overrides without changing the owner's shell state.
+Database probes and integration tests ran outside the socket-restricted sandbox.
+
+| Check | Result | Exit |
+| --- | --- | --- |
+| Windows application database connection | SELECT 1 succeeded | 0 |
+| Windows configured source connection | public.raw_transactions: 18 rows | 0 |
+| Compose syntax/resolved settings | JSON parsed privately; all three clients match source host/port/password | 0 |
+| Docker-network source connection | TCP via source_db:5432, authenticated psql query returned 18 rows | 0 |
+| Configuration regressions | 11 passed; 0.85 s | 0 |
+| All PostgreSQL integration gates | 9 passed, 293 deselected; 13.33 s; no skips | 0 |
+| Full regression, explicit config.settings.test | 448 passed, no skips; 29.03 s | 0 |
+| manage.py check | No issues, 0 silenced | 0 |
+| Ruff / Black / isort | Five changed Python files passed | 0 |
+
+Test commands used the installed `dataxaienv` Python:
+
+```powershell
+python -m pytest apps/etl/tests/test_source_configuration.py -q -o addopts='' --basetemp=.pytest_cache/source-config
+python -m pytest apps/etl/tests/test_sources_postgres.py apps/etl/tests/test_sources_contract.py apps/etl/tests/test_transforms_alias.py apps/etl/tests/test_transforms_type_converter.py apps/etl/tests/test_transforms_dates.py -k 'postgres or all_three_sources' -q -rN -o addopts='' --basetemp=.pytest_cache/source-config-pg
+python -m pytest --ds=config.settings.test -q -rN --tb=short --basetemp=.pytest_cache/source-config-regression
+python manage.py check
+```
+
+The first full run also passed 448 tests (45.29 s), but inherited development
+settings; it is distinguished from the final explicitly configured test run.
+An initial Docker probe failed because Windows text-mode stdin supplied CRLF to
+its password reader; binary stdin corrected the probe, without changing any
+credential. No test failed or remained skipped in the final verification.
+
+Only db and source_db were running. Docker DNS/authentication and resolved client
+configuration were verified, but application container startup is NOT VERIFIED.
+No web/worker/beat service was started or recreated; web startup includes migrations.
+Existing container environments do not automatically refresh after configuration
+changes. No source data was reseeded, altered, or removed, and no application
+migration command, role alteration, volume reset, or destructive Docker command
+was issued. Pytest manages its own test database independently.
+
+The earlier Windows application-source authentication risk is resolved for the
+verified local configuration. Historical risk statements above remain evidence
+of earlier checkpoints. Compose now requires an explicit password for new setups;
+changing it does not rotate credentials in an existing volume. The UCI source
+timezone/loading-policy gates remain unrelated and unchanged.
+
+Secret-bearing resolved Compose output was captured privately; the resolved
+source URL was absent from added repository content, and `.env` remains ignored
+and untracked. No source password is added to tracked code or documentation.
+No stage, commit, push, merge, or branch switch was performed. Owner review of
+this configuration-maintenance change remains pending.
+
+
+## Shared Password Syntax Compatibility Correction - 2026-10-22
+
+Final scoped correction to the uncommitted source-configuration stabilization.
+Branch and HEAD remain `feat/etl-4.3.3` / `9cb8184`. Existing stabilization changes
+were preserved. The real `.env`, source credentials, runtime configuration helper,
+Compose service definitions, and accepted ETL logic were not changed in this pass.
+
+Actual python-decouple and Docker Compose 5.5.1 parser comparisons using synthetic
+credentials confirmed that Compose-style escaped apostrophes are decoded by
+Compose but retained with their backslash by python-decouple. Double-quoted
+escapes and unquoted interpolation/comments also differ. A trailing backslash
+before a closing single quote causes a Compose parse error.
+
+The documented shared-file representation is now a single-line, single-quoted
+literal without apostrophes or a trailing backslash, and without trailing comments.
+Verified matching cases include double quotes, dollar signs and literal variable
+expressions, hash signs, leading/interior/trailing spaces, ordinary internal
+backslashes, doubled literal backslashes, and URL-special characters. No escaping
+or password rewriting is added. SQLAlchemy URL.create remains unchanged.
+
+For values outside that shared-file subset, documentation specifies an exact raw
+SOURCE_POSTGRES_PASSWORD process override for both Python and Compose, with a
+credential-prompt example that avoids a literal password in shell history. Tests
+verify apostrophes, combined quotes/dollar/hash/spaces, and trailing backslashes
+through that alternative. Multiline/NUL values are outside the verified contract.
+
+Files edited in this corrective pass: `.env.example`,
+`docs/SOURCE_DATABASE_CONFIGURATION.md`,
+`apps/etl/tests/test_source_configuration.py`, and this append-only state record.
+Fifteen parser/override regression cases were added to the existing eleven.
+Compose comparisons use temporary synthetic files and `config --environment`;
+no service is started and no real credentials are read by those tests. Rendered
+Compose JSON escapes dollar signs, so it is not used to compare raw password values.
+
+Actual verification with the installed dataxaienv Python:
+
+```powershell
+python -m pytest apps/etl/tests/test_source_configuration.py --ds=config.settings.test -q -o addopts='' --basetemp=.pytest_cache/password-compat
+python -m pytest apps/etl/tests/test_sources_postgres.py apps/etl/tests/test_sources_contract.py apps/etl/tests/test_transforms_alias.py apps/etl/tests/test_transforms_type_converter.py apps/etl/tests/test_transforms_dates.py --ds=config.settings.test -k 'postgres or all_three_sources' -q -rN -o addopts='' --basetemp=.pytest_cache/password-pg
+python manage.py check --settings=config.settings.dev
+python -m ruff check apps/etl/tests/test_source_configuration.py
+python -m black --check apps/etl/tests/test_source_configuration.py
+python -m isort --check-only apps/etl/tests/test_source_configuration.py
+```
+
+- Configuration regressions: **26 passed, zero skipped**, 7.41 s, exit 0.
+- PostgreSQL integration: **9 passed, zero skipped**, 293 deselected, 13.66 s, exit 0.
+- Django check: no issues, zero silenced, exit 0.
+- Ruff, Black and isort: passed, exit 0; Git whitespace check passed.
+- Database verification child processes cleared inherited source/test-URL
+  overrides, leaving the owner's shell unchanged. Synthetic parser tests isolate
+  their source/Compose environment and deliberately exercise override precedence.
+
+No runtime configuration behavior changed, so the complete suite was not repeated.
+The preceding 448-pass full-suite result remains historical evidence, not a new
+execution. Compose CLI-dependent parser tests skip if Docker CLI is absent; none
+skipped here. Application-container startup remains unverified as previously
+recorded. No password rotation, database reset, source fixture changes, stage,
+commit, push, merge, or branch switch was performed. The full stabilization
+change is ready for owner review; acceptance of this maintenance remains pending.
