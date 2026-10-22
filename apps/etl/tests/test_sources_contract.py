@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from etl.sources import CANONICAL_COLUMNS, CsvSource, ExcelSource, PostgresSource
-from etl.tests.test_sources_postgres import SOURCE_DB_URL, _postgres_available
+from etl.tests.test_sources_postgres import POSTGRES_SKIP_REASON, SOURCE_DB_URL, _postgres_available
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -33,9 +33,7 @@ class TestCrossSourceContract:
         assert list(excel_df.columns) == list(CANONICAL_COLUMNS)
         assert len(csv_df) == len(excel_df) == 18
 
-    @pytest.mark.skipif(
-        not _postgres_available(), reason=f"No real Postgres reachable at {SOURCE_DB_URL}"
-    )
+    @pytest.mark.skipif(not _postgres_available(), reason=POSTGRES_SKIP_REASON)
     def test_all_three_sources_produce_the_same_shape(self):
         csv_df = _all_rows(CsvSource(FIXTURES / "online_retail_ii_sample.csv"))
         excel_df = _all_rows(ExcelSource(FIXTURES / "online_retail_ii_sample.xlsx"))

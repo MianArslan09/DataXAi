@@ -35,7 +35,7 @@ services:
     environment:
       POSTGRES_DB: dataxai_source
       POSTGRES_USER: dataxai_source
-      POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:-dataxai_source}
+      POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:?Set SOURCE_POSTGRES_PASSWORD in .env}
     volumes:
       - source_postgres_data:/var/lib/postgresql/data
     ports:
@@ -57,6 +57,13 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       POSTGRES_HOST: db
+      # Build the URL in Python so password special characters are encoded.
+      SOURCE_DATABASE_URL: ""
+      SOURCE_POSTGRES_HOST: source_db
+      SOURCE_POSTGRES_PORT: "5432"
+      SOURCE_POSTGRES_DB: dataxai_source
+      SOURCE_POSTGRES_USER: dataxai_source
+      SOURCE_POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:?Set SOURCE_POSTGRES_PASSWORD in .env}
       REDIS_URL: redis://cache:6379/0
     volumes:
       - static_volume:/app/staticfiles
@@ -80,6 +87,13 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       POSTGRES_HOST: db
+      # Build the URL in Python so password special characters are encoded.
+      SOURCE_DATABASE_URL: ""
+      SOURCE_POSTGRES_HOST: source_db
+      SOURCE_POSTGRES_PORT: "5432"
+      SOURCE_POSTGRES_DB: dataxai_source
+      SOURCE_POSTGRES_USER: dataxai_source
+      SOURCE_POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:?Set SOURCE_POSTGRES_PASSWORD in .env}
       REDIS_URL: redis://cache:6379/0
     depends_on:
       db:
@@ -96,6 +110,13 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       POSTGRES_HOST: db
+      # Build the URL in Python so password special characters are encoded.
+      SOURCE_DATABASE_URL: ""
+      SOURCE_POSTGRES_HOST: source_db
+      SOURCE_POSTGRES_PORT: "5432"
+      SOURCE_POSTGRES_DB: dataxai_source
+      SOURCE_POSTGRES_USER: dataxai_source
+      SOURCE_POSTGRES_PASSWORD: ${SOURCE_POSTGRES_PASSWORD:?Set SOURCE_POSTGRES_PASSWORD in .env}
       REDIS_URL: redis://cache:6379/0
     depends_on:
       db:

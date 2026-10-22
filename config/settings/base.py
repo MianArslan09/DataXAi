@@ -10,6 +10,8 @@ from pathlib import Path
 
 from decouple import Csv, config
 
+from config.source_database import source_database_url
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Local apps live under apps/ and are importable without an "apps." prefix,
@@ -101,10 +103,7 @@ DATABASES = {
 # DataXAi application/warehouse database (Django ORM); this is the
 # simulated SME's own upstream system DataXAi reads FROM. The two must
 # never be the same connection - see Volume 4.1.
-SOURCE_DATABASE_URL = config(
-    "SOURCE_DATABASE_URL",
-    default="postgresql+psycopg://dataxai_source:dataxai_source@source_db:5432/dataxai_source",
-)
+SOURCE_DATABASE_URL = source_database_url(config)
 
 # Where CSV-source files are read from by default (M1's CSV source, Volume 4.2).
 ETL_DATA_DIR = config("ETL_DATA_DIR", default=str(BASE_DIR / "data"))

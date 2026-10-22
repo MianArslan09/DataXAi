@@ -1,40 +1,36 @@
-"""
-Runs against a REAL Postgres instance via SOURCE_DATABASE_URL (falls back
-to this sandbox's local Postgres for local/CI dev - see conftest.py).
-Nothing here is mocked: these tests prove PostgresSource against an
-actual database, seeded with the same real-data-derived rows as the
-CSV/Excel fixtures.
-"""
-
-import os
+"""Real PostgreSQL fixtures via TEST_SOURCE_DATABASE_URL or configured source URL."""
 
 import pytest
+from decouple import config
+from django.conf import settings
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
+from config.source_database import test_source_database_url as resolve_test_url
+from config.source_database import validate_test_source_url
 from etl.exceptions import SourceConnectionError
 from etl.sources import CANONICAL_COLUMNS, PostgresSource
 
-SOURCE_DB_URL = os.environ.get(
-    "TEST_SOURCE_DATABASE_URL",
-    "postgresql+psycopg://dataxai_source:dataxai_source@localhost:5432/dataxai_source",
+SOURCE_DB_URL = validate_test_source_url(resolve_test_url(config, settings.SOURCE_DATABASE_URL))
+POSTGRES_SKIP_REASON = (
+    "Source PostgreSQL unavailable; check TEST_SOURCE_DATABASE_URL or SOURCE_POSTGRES_* "
+    "and server availability (credentials withheld)"
 )
 
 
 def _postgres_available() -> bool:
+    engine = create_engine(SOURCE_DB_URL, connect_args={"connect_timeout": 3})
     try:
-        engine = create_engine(SOURCE_DB_URL)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        engine.dispose()
         return True
-    except Exception:
+    except OperationalError:
         return False
+    finally:
+        engine.dispose()
 
 
-requires_postgres = pytest.mark.skipif(
-    not _postgres_available(),
-    reason=f"No real Postgres reachable at {SOURCE_DB_URL} - see conftest.py",
-)
+requires_postgres = pytest.mark.skipif(not _postgres_available(), reason=POSTGRES_SKIP_REASON)
 
 
 @requires_postgres
