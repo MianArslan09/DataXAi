@@ -39,6 +39,13 @@ class SourceConnectionError(ETLError):
     code = "source_connection_error"
 
 
+class SerializationError(ETLError):
+    """Unsupported SourceBatch representation or malformed SER-v1 payload."""
+
+    default_message = "The source batch could not be serialized or reconstructed faithfully."
+    code = "serialization_error"
+
+
 class TypeConversionError(ETLError):
     """Raised when a non-null value cannot be converted to the target type.
 
