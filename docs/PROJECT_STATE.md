@@ -1038,3 +1038,130 @@ skipped here. Application-container startup remains unverified as previously
 recorded. No password rotation, database reset, source fixture changes, stage,
 commit, push, merge, or branch switch was performed. The full stabilization
 change is ready for owner review; acceptance of this maintenance remains pending.
+
+
+## SourceBatch Serialization Contract (SER-v1) - Formal Owner Acceptance Record, 2026-10-24
+
+### Owner Decision and Repository Baseline
+
+The project owner explicitly confirms formal acceptance of **Volume 4.4.1** after
+reviewing its implementation, verification evidence, and documented limitations.
+This is an owner decision, separate from automated test success. **2026-10-24 is
+this record's date**, not an inferred date for the earlier acceptance decision;
+that exact earlier date was not supplied.
+
+Status: **IMPLEMENTED, TESTED, LOCALLY VERIFIED according to the recorded evidence,
+and FORMALLY OWNER ACCEPTED** within the bounded SER-v1 scope.
+
+Live inspection for this documentation reconciliation found a clean working tree
+on `feat/etl-4.4.1-serialization`, HEAD **`ab4567a`**. That implementation commit
+contains `apps/etl/serialization.py`, `apps/etl/tests/test_serialization.py`, and
+the additive `SerializationError` in `apps/etl/exceptions.py`.
+[PR #3](https://github.com/MianArslan09/DataXAi/pull/3) is open according to the
+owner's current instruction; no merge is claimed. Configuration PR #2 is already
+merged into main, corroborated by ancestor merge commit `c8943b0` in local history.
+
+### Accepted Public Contract and Fidelity
+
+The public API uses the existing `etl.sources.contract.SourceBatch`:
+
+```python
+encode_source_batch(batch: SourceBatch) -> dict
+decode_source_batch(payload: dict) -> SourceBatch
+fingerprint_source_batch(batch: SourceBatch) -> str
+```
+
+The wire format is `dataxai.source-batch`, integer version `1`, using ordinary
+JSON-compatible primitives and explicit scalar tags. It preserves the representation
+available at the SourceBatch boundary, not original CSV/Excel file bytes.
+
+- Positional records retain zero-based row positions, row order/count, index labels,
+  duplicate rows and duplicate string column labels. All eight canonical source
+  columns must be present; additional supported columns are permitted.
+- Supported dtypes, axis names (None or strings), RangeIndex start/stop/step,
+  supported single-level Index/DatetimeIndex labels, and the duplicate-label flag
+  are retained. Runtime scalar types in object columns remain distinct from dtype
+  metadata. Empty batches and duplicate indexes are covered.
+- Exact Python strings, booleans, integers and binary64 floats; supported NumPy
+  booleans, signed/unsigned 8/16/32/64-bit integers (including intc/uintc) and
+  binary16/32/64 floats; Decimal sign/digits/exponent; None, pd.NA, pd.NaT and
+  supported floating NaNs are retained. Tests cover signed zero, NaN payloads,
+  signaling NaNs, Decimal scale/special values, and nullable Float64 visible NaN
+  versus masked NA.
+- Python date/datetime, pandas Timestamp at s/ms/us/ns resolution, and NumPy
+  datetime64 at Y/M/W/D/h/m/s/ms/us/ns with multiplier 1 are supported where faithfully
+  reconstructable. Naive/aware semantics, supported precision, offset/timezone
+  identity and fold are preserved; no timezone is inferred for naive values.
+- Supported frame dtypes are object, native-endian NumPy Boolean/integer/floating
+  types above, datetime64[s/ms/us/ns] including supported timezone dtypes, and
+  nullable pandas Int64/Float64/boolean/string[python].
+- source_name, batch_number and extracted_at are reconstructed without mutating
+  caller input. Structural, scalar and dtype compatibility checks reject malformed,
+  unsupported or noncanonical payloads through SerializationError. Encoding also
+  reconstructs once to reject representations this runtime cannot preserve.
+- SHA-256 hashes canonical UTF-8 JSON with sorted keys, compact separators,
+  ensure_ascii=False and allow_nan=False. Typed content, schema, supported index
+  structure and source_name participate; batch_number and extracted_at are excluded.
+  The fingerprint does not replace logical ingestion/batch identity.
+
+### Recorded Verification Evidence (Not Rerun for This Record)
+
+The owner supplied the following local and GitHub evidence for acceptance:
+
+| Evidence | Recorded result |
+| --- | --- |
+| Local focused serialization tests | 237 passed |
+| Local Ruff | Passed |
+| Local Black check | Passed on the three changed Python files |
+| Local isort | Passed |
+| Local staged whitespace check | Passed |
+| GitHub Actions Run #17, ID 40003492128 | Succeeded: lint, 700 tests passed, 99% reported coverage, Docker build |
+
+[GitHub Actions Run #17](https://github.com/MianArslan09/DataXAi/actions/runs/40003492128)
+is referenced as owner-provided execution evidence; its logs were not independently
+fetched during this reconciliation. The 99% figure is reported aggregate coverage,
+not proof of complete serializer-path coverage. A successful Docker build is not
+application-container runtime or end-to-end pipeline verification.
+
+The earlier implementation-session report in this conversation separately recorded
+237 focused tests, 675 ETL tests and 700 full-suite tests passed, each with zero
+failures/skips and exit 0. Its dedicated PostgreSQL serializer check recorded
+1 passed, 236 deselected, zero skipped, exit 0. CSV, Excel and actual PostgreSQL
+fixture round-trips each retained all 18 records. These are historical local
+execution results, not new executions or a fresh database-health claim.
+
+### Limitations and Remaining Gates
+
+SER-v1 is a bounded SourceBatch serialization boundary. It does not implement
+PostgreSQL staging, warehouse loading/publication, transformation, validation,
+healing, orchestration, retries, worker recovery, or end-to-end pipeline execution.
+The full **Volume 4.4 Load Layer remains incomplete**.
+
+Unsupported representations include arbitrary/custom Python objects and subclasses,
+nested objects, custom tzinfo, longdouble, complex/timedelta/period/categorical and
+other unlisted dtypes/extensions (including nullable Int32), MultiIndex, non-string
+columns, nonnative-endian column arrays, nonempty DataFrame attrs and DatetimeIndex
+frequency metadata. There is no arbitrary Python/pandas object-serialization promise.
+IANA reconstruction requires compatible installed timezone rules. A receiver that
+collapses a distinct NumPy platform type/alias rejects it instead of silently
+coercing it. Cross-platform interchange beyond the reported tests is not verified.
+The reconstruction check adds batch-bounded CPU/memory overhead; no full-million-row
+SER-v1 performance or end-to-end ingestion benchmark is claimed.
+
+Unknown source timezones and nullable cancellation markers still require an
+approved downstream loading policy. Earlier configuration-risk statements remain
+historical: the 2026-10-22 checkpoint resolved the authentication risk for the
+verified local configuration, and configuration PR #2 is merged. That does not
+establish application-container startup or a new connectivity check today.
+
+This checkpoint supersedes prior pending acceptance of 4.4.1 and blanket statements
+that all Volume 4.4 work is closed **only for the accepted 4.4.1 scope**. All prior
+checkpoints, including their pending-acceptance and configuration-maintenance
+statements, are retained as historical evidence. **Volume 4.4.2 and all later
+subphases/milestones remain closed until explicit owner authorization.**
+
+This reconciliation changes only PROJECT_STATE.md, PROJECT_ROADMAP.md, AGENTS.md
+and .github/copilot-instructions.md. Verification is limited to documentation/Git
+review and git diff --check; no application tests, quality suites, database actions
+or dataset scans are rerun. No staging, commit, push, merge, branch switch, code/test
+change or Excel tracker edit is performed. Await the owner's next instruction.
