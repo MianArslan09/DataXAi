@@ -47,23 +47,33 @@ The supplied filename `volume-02-environment-repository.md` is not present in th
 **4.3.3 — Dates and Business Rules: IMPLEMENTED, LOCALLY VERIFIED, and FORMALLY OWNER ACCEPTED on 2026-10-21.** Acceptance covers DT-001 through DT-007 and BR-001 through BR-004. Implementation commit: `6df1e1b` on `feat/etl-4.3.3`. Date interpretation now composes with the accepted converter and cancellation component, preserving safe/unresolved paths and explicit unknown-timezone evidence. Previously recorded verification evidence (not rerun for this documentation reconciliation): 342 focused tests passed; full suite 437 passed with zero skips; nine PostgreSQL integration tests passed; Ruff, Black, and isort passed across 124 repository Python files. See the 2026-10-21 formal acceptance record and preserved 2026-10-20 checkpoint in `docs/PROJECT_STATE.md` for verification evidence and limitations, and [`DATE_NORMALIZATION.md`](DATE_NORMALIZATION.md) for the contract.
 
 Remaining gates:
-- Volume 4.4 and all later milestones require explicit owner authorization
+- Volume 4.4.1 is owner accepted as recorded below; Volume 4.4.2 and all later subphases/milestones remain closed until explicit owner authorization
 - any business rules beyond approved cancellation enrichment require separate owner authorization
 - downstream treatment of unknown source timezones and nullable cancellation markers must be explicitly designed before loading
 
-Date interpretation and cancellation enrichment do not complete the full ETL pipeline. No authorization is implied for Volume 4.3.4, Volume 4.4, or later work.
+Date interpretation and cancellation enrichment do not complete the full ETL pipeline. Acceptance of 4.4.1 below does not authorize Volume 4.3.4, Volume 4.4.2, or later work.
 
 Volume 4.3 must not implement Great Expectations validation, the Pydantic Validation Engine, auto-healing, anomaly detection, forecasting, CLV, or NLP/chatbot.
 
 Volume 4.3.1 implements structural alias mapping, Volume 4.3.2 implements strict type conversion, and Volume 4.3.3 adds date interpretation and cancellation enrichment by composition. The full Volume 4 ETL pipeline remains incomplete; end-to-end loading has not been verified.
 
-Separate configuration risk: the application's existing `SOURCE_DATABASE_URL` credentials failed authentication. PostgreSQL verification used the existing CI `TEST_SOURCE_DATABASE_URL` on `localhost:5433`; it does not establish that the application-configured connection works. This risk remains open and does not change the owner's acceptance of the type-conversion milestone.
+Historical configuration risk at the 4.3 acceptance checkpoint: the application's `SOURCE_DATABASE_URL` credentials failed authentication, while source-test PostgreSQL verification used a separate connection. This open-risk statement is superseded for the verified local configuration by the 2026-10-22 stabilization evidence in `docs/PROJECT_STATE.md`; configuration PR #2 is merged into main (`c8943b0`). Docker application-container startup remains unverified by that evidence. No database connection was retested for this documentation reconciliation.
 
 Business rules:
 - negative quantity is valid
 - negative unit price is a fault
 
 These business rules constrain later ETL and validation behavior; they are not decisions applied by the 4.3.1 alias mapper.
+
+## Volume 4.4 Subphase Status
+
+**4.4.1 - SourceBatch Serialization Contract (SER-v1): IMPLEMENTED, TESTED, LOCALLY VERIFIED according to recorded evidence, and FORMALLY OWNER ACCEPTED.** Implementation commit: `ab4567a`, branch `feat/etl-4.4.1-serialization`, [PR #3](https://github.com/MianArslan09/DataXAi/pull/3) (open according to the owner at reconciliation). The acceptance record is dated 2026-10-24; the exact earlier acceptance-decision date was not supplied.
+
+Recorded evidence: owner-reported local 237 focused tests passed, Ruff/Black/isort and staged whitespace checks passed; owner-reported [GitHub Actions Run #17](https://github.com/MianArslan09/DataXAi/actions/runs/40003492128) succeeded with lint, 700 tests passed, 99% reported coverage, and Docker build. These are prior execution results, not fresh tests performed during documentation reconciliation. The coverage figure is the run's reported aggregate, not a serializer-specific guarantee. See the appended checkpoint in `docs/PROJECT_STATE.md` for the public API, supported fidelity, prior fixture verification, and limitations.
+
+SER-v1 preserves supported SourceBatch representations through encoding/decoding and canonical content fingerprinting. It does not implement PostgreSQL staging, warehouse loading, transformation, validation, or end-to-end pipeline execution. Volume 4.4 Load Layer and the full ETL pipeline remain incomplete. Unknown source timezones and nullable cancellation markers still require an approved downstream loading policy.
+
+**4.4.2 and all later subphases/milestones remain closed until explicit owner authorization.** This acceptance supersedes older blanket 4.4-closed statements only for 4.4.1. It does not authorize another implementation step or imply that PR #3 has been merged.
 
 ## Status Rule
 
