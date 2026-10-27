@@ -82,3 +82,17 @@ Roadmap scope and completion labels are not proof of implementation or verificat
 ## Volume 3 Application Database Verification
 
 **Volume 3 — Database, Auth & Core Infrastructure: LOCALLY VERIFIED** for local application database bootstrap and migration state (2026-10-11). This milestone owns the application schema and its migrations. The Docker/environment setup is Volume 2; this recovery is distinct from ETL Volume 4.3.1. See `docs/PROJECT_STATE.md` for the supplied migration, `showmigrations`, system-check, effective-settings, and 22-table evidence. This local verification does not claim end-to-end application behavior or production readiness.
+
+## Latest Volume 4 Gate — 2026-10-27
+
+<!-- DATA X AI CHECKPOINT 2026-10-27 V4.4.2 OWNER ACCEPTED -->
+
+This checkpoint supersedes earlier current-gate statements above while preserving their historical evidence.
+
+- **4.4.1 — SER-v1:** Remains formally owner accepted. The supplied handoff reports PR #3 merged; this update has not independently verified its remote status.
+- **4.4.2 — Staging Database Schema:** IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded prior evidence, and FORMALLY OWNER ACCEPTED on 2026-10-27. Accepted scope is five models, reversible migration, same-batch PostgreSQL composite constraints and lossless escaped JSON-text storage of authoritative SER-v1 data, including `U+0000`. Prior results: 110 focused and 810 full-suite tests passed with zero failures/skips, exit 0; system, migration-drift and quality checks passed. These checks were not rerun for documentation.
+- **Git integration:** At this checkpoint the four scoped implementation/test files are uncommitted on `feat/etl-4.4.2-staging-schema` at baseline HEAD `c39da8d`. Owner plans PR and merge after documentation review. No 4.4.2 CI or merge success is claimed.
+- **4.4.3 — Raw Staging Persistence:** The handoff supplies proposed design topics for a later owner-directed task: atomic batch persistence, explicit ingestion identity, positional reconciliation, bounded bulk insertion and idempotency. This update does not start design or authorize implementation. Obtain explicit authorization and review the detailed contract before implementing.
+- **Remaining Volume 4:** Loader/attempt services, PipelineRun integration, error handling and end-to-end verification remain incomplete. Unknown timezone and nullable cancellation handling still require approved downstream policies. Operational/derived JSONB restrictions and full SER-v1/accounting checks remain relevant to later persistence design.
+
+See the 2026-10-27 acceptance checkpoint in `PROJECT_STATE.md` for evidence, storage guarantees and limitations. Acceptance of the schema does not complete the Load Layer or the full ETL pipeline.
