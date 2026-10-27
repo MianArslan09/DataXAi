@@ -1165,3 +1165,46 @@ and .github/copilot-instructions.md. Verification is limited to documentation/Gi
 review and git diff --check; no application tests, quality suites, database actions
 or dataset scans are rerun. No staging, commit, push, merge, branch switch, code/test
 change or Excel tracker edit is performed. Await the owner's next instruction.
+
+## Volume 4.4.2 — Staging Schema: Formal Owner Acceptance, 2026-10-27
+
+<!-- DATA X AI CHECKPOINT 2026-10-27 V4.4.2 OWNER ACCEPTED -->
+
+**Owner decision:** The project owner explicitly accepted the current Volume 4.4.2 implementation on 2026-10-27 and requested documentation reconciliation using `DataXAi_4.4.2_Docs_PR_4.4.3_Design_Handoff.zip`. This is FORMALLY OWNER ACCEPTED schema work. Acceptance is an owner decision, separate from execution evidence, and does not imply deployment, merge, a functional staging loader or completion of Volume 4.
+
+**Live Git snapshot at this documentation update:** Branch `feat/etl-4.4.2-staging-schema`, HEAD `c39da8d`; `apps/etl/models.py` modified and the migration and two staging test modules untracked, with nothing staged. The existing untracked `dataxai-4.4.2-final-review.zip` is preserved. HEAD is the earlier documentation baseline, not a 4.4.2 implementation commit. The owner intends to create a PR and merge after reviewing these updates; no 4.4.2 commit, PR, CI result or merge is claimed here.
+
+### Accepted Implementation and Storage Contract
+
+Status: **IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to the prior execution evidence below, and FORMALLY OWNER ACCEPTED.**
+
+- Five models in `apps/etl/models.py`: `StagingIngestion`, `StagingBatch`, `StagingRecord`, `TransformationAttempt`, and `TransformationRecordResult`. Existing `PipelineRun` behavior is preserved.
+- Reversible migration `apps/etl/migrations/0002_staging_schema.py`; focused tests in `apps/etl/tests/test_staging_models.py` and `apps/etl/tests/test_staging_constraints.py`.
+- Unique constraints on `(ingestion, batch_number)`, `(batch, row_position)`, `(batch, attempt_key)` and `(attempt, staged_record)`. PostgreSQL composite foreign keys enforce that each result's attempt and staged record belong to its batch, backed by unique `(id, batch_id)` pairs. State, nonnegative count/position, hash, bounded metadata and storage-shape checks protect the schema; no lifecycle service is implemented.
+- Authoritative SER-v1 headers, original positional record objects and source names use reversible escaped JSON text instead of JSONB. Python-facing values remain dictionaries or strings. Source names are stored as JSON string literals. Supported embedded `U+0000` in source values, metadata, column/index labels and axis names survives reconstruction without changing the SER-v1 fingerprint.
+- PostgreSQL checks JSON syntax and top-level shape without conversion to JSONB. The storage reader rejects ambiguous duplicate JSON keys. Complete SER-v1 semantic validation remains with the accepted decoder after reconstruction; the accepted serializer, extractors and transformations were not modified.
+
+### Prior Verification Evidence — Not Rerun for Documentation
+
+The preceding implementation session executed the following checks against the corrected storage implementation. These are recorded prior results, not new executions on 2026-10-27:
+
+| Check | Recorded result | Exit code |
+| --- | --- | --- |
+| Focused staging tests | 110 passed; zero failures/skips; 18.70 s | 0 |
+| Full project suite, run once after correction | 810 passed; zero failures/skips; 57.76 s | 0 |
+| Django system check with `config.settings.test` | No issues | 0 |
+| Migration-drift check | No changes detected | 0 |
+| Ruff, Black and isort on the four scoped Python files | Passed after correcting one migration help-text line wrap | 0 |
+| Git whitespace check | Passed | 0 |
+
+Genuine PostgreSQL tests covered NUL round trips, exact reconstruction and fingerprints, malformed stored payload rejection, uniqueness and composite batch integrity, and migration reversal/reapplication in a newly created disposable test database. A `PipelineRun` sentinel survived reversal. Existing application/source databases were not migrated. The supplied handoff additionally reports an independent source-only review finding no blocking defect; that statement is attributed to the handoff and is not a second database test execution.
+
+### Boundaries and Next Gate
+
+Operational and derived JSON fields retain JSONB character restrictions. JSON-path lookups are unavailable on the escaped text fields. Full SER-v1 header/record consistency, fingerprint verification and cross-record accounting require the future persistence service; Django `full_clean()` is not automatically called by bulk inserts. No loader, idempotent persistence/retry service, transformation execution/finalization, worker recovery, Celery orchestration, PipelineRun integration, validation, healing, quarantine or warehouse publication is implemented by 4.4.2. Real-UCI staging throughput and end-to-end loading are NOT VERIFIED. Volume 4.4 and the full ETL pipeline remain incomplete; unknown timezone and nullable cancellation loading policies remain outstanding.
+
+The supplied 4.4.3 handoff proposes raw staging persistence design: explicit ingestion identity, atomic per-batch writes, positional/count reconciliation, bounded bulk insertion, and idempotency scoped to ingestion plus batch number. It is reference material for the next owner-directed discussion. This documentation request does not start that design task or authorize 4.4.3 implementation; later milestones require explicit owner authorization and review of their scoped contracts.
+
+The handoff reports PR #3 as merged; remote merge status was not independently checked during this update. Earlier PR-open statements remain historical snapshots. This acceptance checkpoint supersedes earlier blanket statements that 4.4.2 is closed or pending, solely for the accepted 4.4.2 scope. All earlier checkpoints remain intact.
+
+This reconciliation changes only the four project instruction/state/roadmap documents. No tests, migrations, dataset scans, Git staging/commit/push/PR/merge operations, implementation edits or Excel tracker changes were performed for this documentation task.
