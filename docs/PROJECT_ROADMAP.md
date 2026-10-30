@@ -96,3 +96,20 @@ This checkpoint supersedes earlier current-gate statements above while preservin
 - **Remaining Volume 4:** Loader/attempt services, PipelineRun integration, error handling and end-to-end verification remain incomplete. Unknown timezone and nullable cancellation handling still require approved downstream policies. Operational/derived JSONB restrictions and full SER-v1/accounting checks remain relevant to later persistence design.
 
 See the 2026-10-27 acceptance checkpoint in `PROJECT_STATE.md` for evidence, storage guarantees and limitations. Acceptance of the schema does not complete the Load Layer or the full ETL pipeline.
+
+## Latest Volume 4 Gate — 2026-10-30
+
+<!-- DATA X AI CHECKPOINT 2026-10-30 V4.4.3 OWNER ACCEPTED -->
+
+This current checkpoint supersedes earlier gate statements, including the historical 4.4.3-not-authorized statement, without rewriting those records.
+
+- **4.4.1 — SER-v1:** Remains formally owner accepted.
+- **4.4.2 — Staging Database Schema:** Remains formally owner accepted on 2026-10-27. Verified historical Git integration: PR #4 merged on 2026-10-27, merge commit `f61fc7f`.
+- **4.4.3 — Atomic Raw Staging Persistence:** IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, and FORMALLY OWNER ACCEPTED on 2026-10-30. Accepted scope includes atomic header/record persistence, bounded bulk insertion, ingestion-scoped identity and sequencing, verified idempotent replay, conflict rejection, PostgreSQL concurrency and rollback checks, and final contract hardening.
+- **Evidence:** Codex-reported initial 21 focused PostgreSQL tests, 110 staging regression tests and 831 full-suite tests passed; full suite had zero failures/skips, exit 0. Final hardening: 23 PostgreSQL tests passed, zero failures/skips, 12.58 seconds, exit 0; quality/whitespace checks passed. The full suite was not rerun after hardening. Independent source review preceded the two final tests. No tests were rerun for this documentation update.
+- **Current Git boundary:** 4.4.3 implementation remains uncommitted on `feat/etl-4.4.3-raw-staging` at `f61fc7f`. Owner acceptance does not claim a 4.4.3 commit, push, PR, CI result or merge.
+- **4.4.4 — Next proposed design gate:** Not implemented or automatically authorized. Obtain explicit owner authorization before starting; later milestones remain gated.
+
+Retries must reuse the original ingestion UUID and batch number. Equal content under another valid sequential batch number remains distinct. Outer transactions govern ultimate durability; persistence retry safety does not guarantee deterministic PostgreSQL re-extraction or cross-session checkpoint recovery. See the 2026-10-30 `PROJECT_STATE.md` checkpoint for the accepted limitations and evidence provenance.
+
+Volume 4.4 and end-to-end ETL remain incomplete. Transformation-attempt execution, ingestion finalization, replay orchestration, PipelineRun integration and warehouse publication remain future work. Unknown source timezones and nullable cancellation markers still require approved loading policies; no million-row staging throughput or full-pipeline verification is claimed.

@@ -30,3 +30,15 @@ For every implementation task, explicitly state:
 Volume 4.4.2 staging schema is IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded prior evidence, and FORMALLY OWNER ACCEPTED on 2026-10-27. Prior results: 110 focused and 810 full-suite tests passed with zero failures/skips. See the latest `docs/PROJECT_STATE.md` checkpoint for the reversible escaped JSON-text storage correction, PostgreSQL constraints, verification provenance and limitations. Tests were not rerun for this documentation update.
 
 This record supersedes earlier blanket 4.4.2-closed statements, consistently with `AGENTS.md`. Commit/PR/CI/merge status must be inspected live; owner acceptance is not proof of Git integration. The provided 4.4.3 handoff contains proposed design material, not authorization from this documentation request to start design or implementation. Wait for explicit owner instructions and an approved implementation contract. Do not advance later milestones automatically or claim completion of the Load Layer or full ETL pipeline.
+
+## Latest Owner-Accepted Gate — 2026-10-30
+
+<!-- DATA X AI CHECKPOINT 2026-10-30 V4.4.3 OWNER ACCEPTED -->
+
+Volume 4.4.3 (Atomic Raw Staging Persistence) is IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, and FORMALLY OWNER ACCEPTED on 2026-10-30, including final hardening and documented limitations. Use the latest dated `PROJECT_STATE.md` checkpoint for detailed execution/review provenance, consistently with `AGENTS.md`; no tests were rerun for this documentation update.
+
+This supersedes historical statements that 4.4.3 was unauthorized or merely proposed; retain those records. Live code/tests/migrations/Git remain authoritative for implementation. Volumes 4.4.1 and 4.4.2 remain accepted; local Git history verifies 4.4.2 PR #4 merged on 2026-10-27 at `f61fc7f`. Current 4.4.3 changes remain uncommitted on `feat/etl-4.4.3-raw-staging`; do not infer commit, PR, CI, push or merge from acceptance.
+
+Preserve ingestion-scoped batch identity, verified replay, legitimate duplicates and accepted contracts. Fingerprints do not deduplicate independent batches; outer transactions govern durability, and retry safety does not guarantee deterministic re-extraction or checkpoint recovery.
+
+**4.4.4 is only the next proposed design gate, not implemented or authorized.** Obtain explicit owner authorization before it or later milestones. The Load Layer/full ETL pipeline and downstream loading policies remain incomplete. Preserve all existing scope-control and Git restrictions.
