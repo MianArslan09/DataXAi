@@ -71,3 +71,17 @@ Volume 4.4.2 (Staging Database Schema) is IMPLEMENTED, TESTED, LOCALLY VERIFIED,
 This checkpoint supersedes earlier blanket 4.4.2-closed statements. At acceptance reconciliation the implementation is uncommitted on `feat/etl-4.4.2-staging-schema`, baseline HEAD `c39da8d`; inspect live Git before claiming commit, PR, CI or merge. The owner intends to perform PR/merge after documentation review.
 
 The supplied 4.4.3 raw staging persistence handoff is proposed design reference material. This documentation request does not authorize starting that task or implementing it. Proceed only on explicit owner instruction; later implementations require an approved scope and acceptance criteria. Preserve SER-v1, existing staging and PipelineRun behavior, positional lineage and source data. Full Volume 4.4 and end-to-end ETL remain incomplete.
+
+## Latest Owner-Accepted Gate — 2026-10-30
+
+<!-- DATA X AI CHECKPOINT 2026-10-30 V4.4.3 OWNER ACCEPTED -->
+
+Volume 4.4.3 (Atomic Raw Staging Persistence) is IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, and FORMALLY OWNER ACCEPTED on 2026-10-30, including final hardening and documented limitations. See the dated `docs/PROJECT_STATE.md` checkpoint for Codex-reported execution evidence and independent-review provenance; no tests were rerun for this documentation update.
+
+Use the latest dated acceptance checkpoint to interpret current milestone gates while retaining live code/tests/migrations/Git as the implementation source of truth. Earlier 4.4.3-not-authorized statements describe their historical dates and are superseded by this checkpoint. All existing architecture, data-quality, preservation and scope-control rules remain in force.
+
+Volumes 4.4.1 and 4.4.2 remain accepted; local Git history verifies 4.4.2 PR #4 merged on 2026-10-27 at `f61fc7f`. At this reconciliation, 4.4.3 is uncommitted on `feat/etl-4.4.3-raw-staging` at that HEAD. Acceptance is not proof of commit, PR, CI, push or merge; inspect live Git before claiming integration.
+
+Preserve ingestion-scoped `(ingestion_id, batch_number)` identity, verified replay and legitimate duplicate batches. Fingerprints are content verifiers, not deduplication identities. Outer transactions control durability; retry safety does not imply deterministic upstream re-extraction or cross-session recovery. Preserve accepted serializer, schema, source and transformation contracts.
+
+**Volume 4.4.4 is only the next proposed design gate, not implemented or authorized.** It and later milestones require explicit owner authorization. Full Volume 4.4/end-to-end ETL remain incomplete; downstream loading policies for unknown timezones and nullable cancellation markers remain pending.

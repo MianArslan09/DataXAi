@@ -46,6 +46,27 @@ class SerializationError(ETLError):
     code = "serialization_error"
 
 
+class StagingIngestionError(ETLError):
+    """The requested ingestion is absent or cannot accept a new batch."""
+
+    default_message = "The ingestion cannot accept the requested staging operation."
+    code = "staging_ingestion_error"
+
+
+class StagingConflictError(ETLError):
+    """A logical ingestion/batch identity already contains different content."""
+
+    default_message = "The staging batch identity already contains different source content."
+    code = "staging_conflict"
+
+
+class StagingIntegrityError(ETLError):
+    """Invalid staging input, sequence or persisted representation/accounting."""
+
+    default_message = "The staging data failed an integrity check."
+    code = "staging_integrity_error"
+
+
 class TypeConversionError(ETLError):
     """Raised when a non-null value cannot be converted to the target type.
 

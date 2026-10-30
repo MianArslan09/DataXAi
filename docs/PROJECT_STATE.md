@@ -1208,3 +1208,56 @@ The supplied 4.4.3 handoff proposes raw staging persistence design: explicit ing
 The handoff reports PR #3 as merged; remote merge status was not independently checked during this update. Earlier PR-open statements remain historical snapshots. This acceptance checkpoint supersedes earlier blanket statements that 4.4.2 is closed or pending, solely for the accepted 4.4.2 scope. All earlier checkpoints remain intact.
 
 This reconciliation changes only the four project instruction/state/roadmap documents. No tests, migrations, dataset scans, Git staging/commit/push/PR/merge operations, implementation edits or Excel tracker changes were performed for this documentation task.
+
+## Volume 4.4.3 — Atomic Raw Staging Persistence: Formal Owner Acceptance, 2026-10-30
+
+<!-- DATA X AI CHECKPOINT 2026-10-30 V4.4.3 OWNER ACCEPTED -->
+
+**Owner decision:** The project owner FORMALLY ACCEPTED Volume 4.4.3 on 2026-10-30, including final hardening and the limitations below. Status: **IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, and FORMALLY OWNER ACCEPTED.** Acceptance is an explicit owner decision, separate from automated verification and independent source review.
+
+**Git snapshot:** Branch `feat/etl-4.4.3-raw-staging`, HEAD `f61fc7f`. Local Git history verifies that Volume 4.4.2 was merged through PR #4 on 2026-10-27 at `f61fc7f`. The 4.4.3 changes remain uncommitted: modified `apps/etl/exceptions.py`, untracked `apps/etl/staging.py` and `apps/etl/tests/test_staging_persistence.py`. No 4.4.3 commit, push, PR, CI success or merge is claimed.
+
+### Accepted Implementation
+
+- New `etl.staging.stage_source_batch()` service, three scoped exceptions extending the established ETL exception hierarchy, and PostgreSQL persistence regression tests.
+- Stable logical identity `(ingestion_id, batch_number)` and contiguous zero-based batch numbering. Source-content fingerprints verify content; they do not replace identity.
+- Atomic batch-header and record persistence on the application PostgreSQL connection, parent-ingestion locking through Django/PostgreSQL transactions, and bounded bulk inserts of at most 1,000 records per operation.
+- Idempotent retries return verified existing batches; conflicting retries are rejected without mutation. Replay checks stored metadata, record positions, counts, complete reconstructed SER-v1 content and fingerprints. Original committed headers and extraction timestamps are retained rather than overwritten by retries.
+- Legitimate duplicate source transactions, supported Unicode, `U+0000`, Decimal values and original source metadata are preserved.
+- Accepted 4.4.1 serialization, 4.4.2 models/migrations, extractors and transformations are unchanged.
+
+### Recorded Verification and Review Provenance
+
+The following are **Codex-reported execution evidence from the implementation and hardening sessions**, not fresh test executions on the acceptance date or during this documentation update.
+
+| Phase / check | Recorded evidence |
+| --- | --- |
+| Initial focused PostgreSQL persistence tests | 21 passed |
+| Existing staging regression tests | 110 passed |
+| Initial complete project suite | 831 passed; zero failures/skips; exit 0 |
+| Initial Django system and migration-drift checks | Passed |
+| Initial Ruff, Black, isort and whitespace checks | Passed |
+| Initial PostgreSQL transaction/concurrency checks | Concurrent submissions and injected rollback behavior verified in the supplied execution report |
+| Final hardening PostgreSQL persistence tests | 23 passed; zero failures/skips; 12.58 seconds; exit 0 |
+| Final hardening Ruff, Black, isort and whitespace checks | Passed; exit 0 |
+| Final hardening AST comparison | Reported unchanged production service logic and existing tests |
+
+The two final tests verify rollback of a successful nested service call when the outer transaction fails, and distinct logical batches for identical content under different valid sequential batch numbers. **The complete 831-test suite was not rerun after hardening** and remains prior verification evidence.
+
+Independent source review was completed before the two final hardening tests. No independent execution or source review of those final tests is claimed. Implementation completion, executed tests, reported local/PostgreSQL verification, independent source review and the owner's 2026-10-30 acceptance are separate facts. Historical October 27 evidence is not the formal acceptance date.
+
+### Accepted Limitations and Next Gate
+
+1. An identical retry must reuse the original ingestion UUID and batch number.
+2. Identical content under a different valid batch number is a distinct logical batch. Fingerprints must not suppress legitimate duplicate data.
+3. PostgreSQL re-extraction without stable ordering and a consistent source snapshot may change batch grouping. The persistence service rejects conflicting retries; it cannot guarantee deterministic cross-session re-extraction. `PostgresSource` ordering is unchanged.
+4. A surrounding Django transaction controls ultimate durability. A successful nested service call is atomic but does not independently commit; an outer rollback removes its persisted effects.
+5. Reliable cross-session checkpoint recovery and upstream replay orchestration remain future responsibilities.
+6. Transformation-attempt execution, healing, quarantine, ingestion finalization, PipelineRun integration, warehouse publication and downstream exactly-once persisted effects are not implemented by 4.4.3.
+7. No million-row staging throughput benchmark or complete end-to-end ETL verification is claimed.
+
+These are accepted scope boundaries, not unresolved 4.4.3 defects. Volume 4.4 and the full ETL pipeline remain incomplete. Unknown source timezones and nullable cancellation markers still require approved downstream loading policies.
+
+This checkpoint supersedes earlier statements that 4.4.3 was unauthorized or only proposed; those statements remain unchanged as historical records. Accepted 4.4.1 and 4.4.2 statuses are preserved. **Volume 4.4.4 is only the next proposed design gate; it is not implemented or automatically authorized.** Explicit owner authorization is required before that or any later milestone begins.
+
+This reconciliation edits only the four authorized Markdown documents. No application tests, database actions or dataset scans were rerun. Implementation, tests, configuration, migrations, archives and the Excel tracker were not modified. Git integration remains for the owner; no staging, commit, push, PR or merge was performed.
