@@ -1261,3 +1261,55 @@ These are accepted scope boundaries, not unresolved 4.4.3 defects. Volume 4.4 an
 This checkpoint supersedes earlier statements that 4.4.3 was unauthorized or only proposed; those statements remain unchanged as historical records. Accepted 4.4.1 and 4.4.2 statuses are preserved. **Volume 4.4.4 is only the next proposed design gate; it is not implemented or automatically authorized.** Explicit owner authorization is required before that or any later milestone begins.
 
 This reconciliation edits only the four authorized Markdown documents. No application tests, database actions or dataset scans were rerun. Implementation, tests, configuration, migrations, archives and the Excel tracker were not modified. Git integration remains for the owner; no staging, commit, push, PR or merge was performed.
+
+## Volume 4.4.4 — SourceBatch Reconstruction and Replay: FORMALLY OWNER ACCEPTED — 2026-10-31
+
+<!-- DATA X AI CHECKPOINT 2026-10-31 V4.4.4 OWNER ACCEPTED -->
+
+**Owner decision:** The project owner formally accepted Volume 4.4.4 on October 31, 2026, following implementation, reported PostgreSQL verification and independent source review with no identified blocking defects. Status: **IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, INDEPENDENTLY REVIEWED, and FORMALLY OWNER ACCEPTED.** Implementation, test execution, verification provenance, independent review and owner acceptance are distinct facts.
+
+**Git snapshot:** Branch `feat/etl-4.4.4-reconstruction`, HEAD `52da230`. The three implementation/test changes remain uncommitted: modified `apps/etl/exceptions.py`, untracked `apps/etl/staging_reader.py` and `apps/etl/tests/test_staging_reader.py`. No 4.4.4 commit, push, PR, merge or GitHub CI verification is claimed. Local Git history confirms accepted 4.4.1 merged through PR #3 at `af24048` on 2026-10-24, accepted 4.4.2 through PR #4 at `f61fc7f` on 2026-10-27, and accepted 4.4.3 through PR #5 at `52da230` on 2026-10-30.
+
+### Accepted Reconstruction Contract
+
+- `apps/etl/staging_reader.py` provides the Python service function `load_source_batch(*, ingestion_id: UUID, batch_number: int) -> SourceBatch`. It is not a DRF HTTP endpoint; no API route was added.
+- The service requires the application PostgreSQL database, validates UUID/nonnegative integer identity (rejecting Boolean batch numbers), and looks up exactly `(ingestion_id, batch_number)`. OPEN, COMPLETE and ABORTED ingestions can be read.
+- Stored header metadata is checked against relational source name, batch number, row count and serializer version; embedded header records are rejected. Ordered database records and encoded positions must be contiguous from zero, with exact row counts. The complete SER-v1 payload is reconstructed through the accepted decoder and its content fingerprint verified before return.
+- Supported DataFrame values, dtypes, indexes, duplicate records, Decimal scale, timestamps, Unicode, `U+0000` and original source metadata are preserved. Repeated reads return fresh equivalent batches without transforming, normalizing, deduplicating or repairing data.
+- PostgreSQL retrieval uses iterator chunks of 1,000 rows. Read-only behavior was checked: no INSERT, UPDATE, DELETE or row-level write locks.
+- `StagingBatchNotFoundError` was added to the established ETL exception hierarchy for missing batches. Invalid identity or corrupted/inconsistent storage raises `StagingIntegrityError`; anticipated stored-field/serialization errors are translated without exposing raw source values. Unexpected database/programming failures propagate.
+- Focused tests were added in `apps/etl/tests/test_staging_reader.py`. The accepted 4.4.3 writer, SER-v1 serializer, staging schema and migrations remain unchanged.
+
+### Recorded Verification and Independent Review
+
+The following results are **Codex-reported local execution evidence from the implementation session**, not fresh executions during this documentation reconciliation:
+
+| Check | Recorded result | Exit code |
+| --- | --- | --- |
+| New PostgreSQL reader tests | 29 passed; 9.71 seconds | 0 |
+| Existing persistence regressions | 23 passed; 7.96 seconds | 0 |
+| Existing schema regressions | 110 passed; 13.19 seconds | 0 |
+| Full project suite, run once | 862 passed; 66.73 seconds | 0 |
+| Failures/skips/deselections in the successful test runs | 0 | — |
+| Django system check | Passed; no issues | 0 |
+| Migration-drift check | Passed; no changes detected | 0 |
+| Ruff, Black, isort and whitespace checks | Passed | 0 |
+
+The initial sandboxed reader attempt encountered 29 PostgreSQL setup errors (exit 1); the subsequent run outside the sandbox passed. The sandboxed Black worker stalled and was interrupted; its subsequent run outside the sandbox passed. Neither unsuccessful attempt is represented as successful verification or silently skipped coverage. PostgreSQL-required test configuration prevented required staging checks from silently skipping; tests used the existing disposable-database infrastructure.
+
+Independent source review of the submitted implementation identified no blocking defects, as reported by the owner. Tests were not independently rerun during that review. The independent review and the owner's acceptance are separate from the Codex-reported test results. No pytest, Django, database, dataset or quality-suite execution was repeated for this documentation-only task; verification here is limited to documentation/Git review, whitespace and preservation checks.
+
+### Accepted Architectural Limitations and Next Gate
+
+1. Reconstruction materializes one complete SourceBatch in memory. Bounded database retrieval is not a constant-memory reconstruction guarantee or entire-ingestion streaming.
+2. Read consistency assumes committed staging records remain immutable under the accepted writer contract; out-of-band concurrent edits are outside that guarantee.
+3. SER-v1 content fingerprints exclude `extracted_at` and batch number. Valid timestamp-only modifications are not cryptographically detected. Batch number is checked separately against relational identity; this milestone does not change the hashing contract.
+4. This is a Python service, not an HTTP API endpoint.
+5. No upstream source reconnection, automatic retry orchestration, Celery scheduling, ingestion finalization, healing, quarantine, warehouse publication or downstream transformation execution was added.
+6. Complete end-to-end ETL and real-dataset reconstruction throughput were not verified as part of 4.4.4.
+
+These are accepted limitations, not newly discovered implementation defects. Full Volume 4.4 and end-to-end ETL remain incomplete; unknown source timezones and nullable cancellation markers still require approved downstream loading policies.
+
+This checkpoint supersedes historical statements that 4.4.4 was only proposed or unauthorized. Earlier checkpoints remain unchanged. Volumes 4.4.1, 4.4.2 and 4.4.3 remain formally accepted and merged. **Volume 4.4.5 is the next architecture/design gate: not implemented, not tested and not formally accepted.** Explicit owner authorization is required before beginning it or later milestones.
+
+Only the four authorized Markdown documents were edited for this reconciliation. Implementation files, tests, configuration, migrations and Excel workbooks were not modified. The expected `dataxai-4.4.4-review.zip` was absent at inspection and was not created, removed or changed. No staging, commit, push, PR, merge or branch switch was performed; Git integration remains a separate owner-directed task.
