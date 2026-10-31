@@ -42,3 +42,15 @@ This supersedes historical statements that 4.4.3 was unauthorized or merely prop
 Preserve ingestion-scoped batch identity, verified replay, legitimate duplicates and accepted contracts. Fingerprints do not deduplicate independent batches; outer transactions govern durability, and retry safety does not guarantee deterministic re-extraction or checkpoint recovery.
 
 **4.4.4 is only the next proposed design gate, not implemented or authorized.** Obtain explicit owner authorization before it or later milestones. The Load Layer/full ETL pipeline and downstream loading policies remain incomplete. Preserve all existing scope-control and Git restrictions.
+
+## Latest Owner-Accepted Gate — 2026-10-31
+
+<!-- DATA X AI CHECKPOINT 2026-10-31 V4.4.4 OWNER ACCEPTED -->
+
+Consistently with `AGENTS.md`, Volume 4.4.4 (SourceBatch Reconstruction and Replay) is IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, INDEPENDENTLY REVIEWED, and FORMALLY OWNER ACCEPTED on 2026-10-31. Refer to the dated `docs/PROJECT_STATE.md` checkpoint for Codex-reported test evidence, independent source-review provenance and accepted limitations. No tests were rerun for this documentation update.
+
+This supersedes historical 4.4.4-proposed/unauthorized statements without deleting them. Volumes 4.4.1 and 4.4.2 remain formally accepted and merged (PR #3 / `af24048`, PR #4 / `f61fc7f`); 4.4.3 is accepted and merged through PR #5 on 2026-10-30 at `52da230`. Current 4.4.4 implementation remains uncommitted on `feat/etl-4.4.4-reconstruction` at `52da230`; do not infer commit, push, PR, merge or CI verification from acceptance.
+
+Preserve the read-only Python reconstruction service, supported source fidelity and accepted writer/serializer/schema contracts. No HTTP endpoint is implemented. Keep one-batch memory, immutable-record consistency and fingerprint exclusions explicit.
+
+**4.4.5 is the next architecture/design gate: not implemented, not tested and not formally accepted.** Obtain explicit owner authorization before starting it or later work. Full Volume 4.4/end-to-end ETL and downstream loading policies remain incomplete. All existing scope-control and Git restrictions continue to apply.

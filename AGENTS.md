@@ -85,3 +85,15 @@ Volumes 4.4.1 and 4.4.2 remain accepted; local Git history verifies 4.4.2 PR #4 
 Preserve ingestion-scoped `(ingestion_id, batch_number)` identity, verified replay and legitimate duplicate batches. Fingerprints are content verifiers, not deduplication identities. Outer transactions control durability; retry safety does not imply deterministic upstream re-extraction or cross-session recovery. Preserve accepted serializer, schema, source and transformation contracts.
 
 **Volume 4.4.4 is only the next proposed design gate, not implemented or authorized.** It and later milestones require explicit owner authorization. Full Volume 4.4/end-to-end ETL remain incomplete; downstream loading policies for unknown timezones and nullable cancellation markers remain pending.
+
+## Latest Owner-Accepted Gate — 2026-10-31
+
+<!-- DATA X AI CHECKPOINT 2026-10-31 V4.4.4 OWNER ACCEPTED -->
+
+Volume 4.4.4 (SourceBatch Reconstruction and Replay) is IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, INDEPENDENTLY REVIEWED, and FORMALLY OWNER ACCEPTED on 2026-10-31. Detailed Codex-reported execution evidence, independent source-review provenance and accepted limitations are in the dated `docs/PROJECT_STATE.md` checkpoint; no tests were rerun for this documentation update.
+
+This current gate supersedes earlier statements that 4.4.4 was only proposed or unauthorized; preserve those historical records. Volumes 4.4.1 and 4.4.2 remain accepted and merged (PR #3 / `af24048`, PR #4 / `f61fc7f`). Volume 4.4.3 remains accepted and merged through PR #5 on 2026-10-30 at `52da230`. At this reconciliation, 4.4.4 implementation is uncommitted on `feat/etl-4.4.4-reconstruction` at that HEAD. Acceptance does not establish commit, push, PR, merge or CI success; inspect live Git before claiming integration.
+
+Preserve the read-only `load_source_batch()` Python service and accepted writer/SER-v1/schema contracts. No HTTP endpoint is implemented. Reconstruction materializes one batch, assumes immutable committed staging records and preserves the existing fingerprint exclusions. All existing architecture, data-quality, preservation and Git rules remain in force.
+
+**Volume 4.4.5 is the next architecture/design gate: not implemented, not tested and not formally accepted.** Explicit owner authorization is required before starting it or later milestones. Full Volume 4.4/end-to-end ETL remain incomplete; downstream loading policies remain pending.

@@ -67,6 +67,13 @@ class StagingIntegrityError(ETLError):
     code = "staging_integrity_error"
 
 
+class StagingBatchNotFoundError(ETLError):
+    """Raised when the requested ingestion/batch identity has not been staged."""
+
+    default_message = "The requested staging batch does not exist."
+    code = "staging_batch_not_found"
+
+
 class TypeConversionError(ETLError):
     """Raised when a non-null value cannot be converted to the target type.
 

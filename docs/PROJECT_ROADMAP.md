@@ -113,3 +113,19 @@ This current checkpoint supersedes earlier gate statements, including the histor
 Retries must reuse the original ingestion UUID and batch number. Equal content under another valid sequential batch number remains distinct. Outer transactions govern ultimate durability; persistence retry safety does not guarantee deterministic PostgreSQL re-extraction or cross-session checkpoint recovery. See the 2026-10-30 `PROJECT_STATE.md` checkpoint for the accepted limitations and evidence provenance.
 
 Volume 4.4 and end-to-end ETL remain incomplete. Transformation-attempt execution, ingestion finalization, replay orchestration, PipelineRun integration and warehouse publication remain future work. Unknown source timezones and nullable cancellation markers still require approved loading policies; no million-row staging throughput or full-pipeline verification is claimed.
+
+## Latest Volume 4 Gate — 2026-10-31
+
+<!-- DATA X AI CHECKPOINT 2026-10-31 V4.4.4 OWNER ACCEPTED -->
+
+This checkpoint supersedes earlier 4.4.4-proposed/unauthorized statements while preserving them as historical records.
+
+- **4.4.1 — SER-v1:** Formally accepted and merged through PR #3 (`af24048`, 2026-10-24).
+- **4.4.2 — Staging Database Schema:** Formally accepted and merged through PR #4 (`f61fc7f`, 2026-10-27).
+- **4.4.3 — Atomic Raw Staging Persistence:** Formally accepted and merged through PR #5 on 2026-10-30 (`52da230`). These integration records are confirmed by local Git history.
+- **4.4.4 — SourceBatch Reconstruction and Replay:** IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded evidence, INDEPENDENTLY REVIEWED, and FORMALLY OWNER ACCEPTED on 2026-10-31. The read-only Python service reconstructs one staged batch with metadata, position/count, SER-v1 and fingerprint checks; it is not an HTTP endpoint. Its implementation remains uncommitted on `feat/etl-4.4.4-reconstruction` at `52da230`; no push, PR, merge or GitHub CI success is claimed.
+- **4.4.5 — Next architecture/design gate:** Not implemented, not tested and not formally accepted. Explicit owner authorization is required before starting; later milestones remain gated.
+
+See the 2026-10-31 `PROJECT_STATE.md` checkpoint for Codex-reported results (29 reader, 23 persistence, 110 schema and 862 full-suite tests passed), independent source-review provenance, initial sandbox limitations and accepted architectural boundaries. No tests were rerun for this documentation update.
+
+Reconstruction materializes one batch, assumes immutable committed records, and retains the existing fingerprint exclusions. Full Volume 4.4/end-to-end ETL remain incomplete. Downstream transformation execution, recovery/orchestration, ingestion finalization and warehouse publication remain outside 4.4.4; real-dataset reconstruction throughput is not verified. Unknown timezone and nullable cancellation loading policies remain pending.
