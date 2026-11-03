@@ -74,6 +74,27 @@ class StagingBatchNotFoundError(ETLError):
     code = "staging_batch_not_found"
 
 
+class AttemptRegistrationError(ETLError):
+    """Invalid attempt operation input or missing selected identity."""
+
+    default_message = "The transformation attempt request is invalid."
+    code = "attempt_registration_error"
+
+
+class AttemptConflictError(ETLError):
+    """An attempt identity, lifecycle transition or terminal retry conflicts."""
+
+    default_message = "The transformation attempt conflicts with its recorded state."
+    code = "attempt_conflict"
+
+
+class AttemptIntegrityError(ETLError):
+    """Stored metadata, supplied interpretation or result lineage is inconsistent."""
+
+    default_message = "The transformation attempt failed an integrity check."
+    code = "attempt_integrity_error"
+
+
 class TypeConversionError(ETLError):
     """Raised when a non-null value cannot be converted to the target type.
 
