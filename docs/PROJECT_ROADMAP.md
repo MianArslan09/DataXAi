@@ -129,3 +129,17 @@ This checkpoint supersedes earlier 4.4.4-proposed/unauthorized statements while 
 See the 2026-10-31 `PROJECT_STATE.md` checkpoint for Codex-reported results (29 reader, 23 persistence, 110 schema and 862 full-suite tests passed), independent source-review provenance, initial sandbox limitations and accepted architectural boundaries. No tests were rerun for this documentation update.
 
 Reconstruction materializes one batch, assumes immutable committed records, and retains the existing fingerprint exclusions. Full Volume 4.4/end-to-end ETL remain incomplete. Downstream transformation execution, recovery/orchestration, ingestion finalization and warehouse publication remain outside 4.4.4; real-dataset reconstruction throughput is not verified. Unknown timezone and nullable cancellation loading policies remain pending.
+
+## 2026-11-02 — Volume 4.4.5: Implementation and Verification Completed; Owner Acceptance Pending
+
+<!-- DATA X AI CHECKPOINT 2026-11-02 V4.4.5 REVIEWED PENDING ACCEPTANCE -->
+
+**IMPLEMENTED — TESTED — LOCALLY VERIFIED — POSTGRES VERIFIED — INDEPENDENTLY REVIEWED — OWNER ACCEPTANCE PENDING.**
+
+This checkpoint supersedes historical statements that 4.4.5 was proposed, unauthorized or not implemented, without changing those historical records. Implementation and reported verification are complete; formal owner acceptance has not been recorded and is not implied by test success, independent review or documentation authorization.
+
+The approved Option 2 service registers, starts, completes and fails attempts using existing models and application PostgreSQL. It persists exact positional SAFE/UNRESOLVED outcomes and bounded evidence with `result_payload` SQL NULL; it does not persist full transformed values or execute transformations. Hardening verifies exact SER-v1 index representations, genuine concurrent first registration and SQL NULL distinct from JSONB null.
+
+Recorded evidence: 98 focused, 483 related and 960 full-suite tests passed, with zero failures/skips in final runs; Django, migration-drift and quality checks passed. Independent final source review found no acceptance-blocking defects; no independent test execution is claimed. See the 2026-11-02 `PROJECT_STATE.md` checkpoint for provenance, earlier failed/environment-blocked runs and architectural boundaries. No tests were rerun for this documentation update.
+
+Live branch is `feat/etl-4.4.5-attempt-persistence` at `fe7209e`, the accepted 4.4.4 PR #6 merge baseline. Current 4.4.5 work remains uncommitted; no push, PR, merge or CI success is verified. Next action is explicit owner acceptance review, with Git integration separately authorized. **Volume 4.4.6 and later gates remain closed.** Full Volume 4.4/end-to-end ETL remain incomplete.
