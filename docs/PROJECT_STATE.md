@@ -1313,3 +1313,63 @@ These are accepted limitations, not newly discovered implementation defects. Ful
 This checkpoint supersedes historical statements that 4.4.4 was only proposed or unauthorized. Earlier checkpoints remain unchanged. Volumes 4.4.1, 4.4.2 and 4.4.3 remain formally accepted and merged. **Volume 4.4.5 is the next architecture/design gate: not implemented, not tested and not formally accepted.** Explicit owner authorization is required before beginning it or later milestones.
 
 Only the four authorized Markdown documents were edited for this reconciliation. Implementation files, tests, configuration, migrations and Excel workbooks were not modified. The expected `dataxai-4.4.4-review.zip` was absent at inspection and was not created, removed or changed. No staging, commit, push, PR, merge or branch switch was performed; Git integration remains a separate owner-directed task.
+
+## 2026-11-02 — Volume 4.4.5: Implementation and Verification Completed; Owner Acceptance Pending
+
+<!-- DATA X AI CHECKPOINT 2026-11-02 V4.4.5 REVIEWED PENDING ACCEPTANCE -->
+
+**IMPLEMENTED — TESTED — LOCALLY VERIFIED — POSTGRES VERIFIED — INDEPENDENTLY REVIEWED — OWNER ACCEPTANCE PENDING.**
+
+The owner authorized implementation and this documentation reconciliation, but explicit formal acceptance of Volume 4.4.5 has not been recorded. Verification and independent review do not constitute acceptance. This checkpoint supersedes historical statements that 4.4.5 was proposed, unauthorized or not implemented; those records, including the 4.4.4 acceptance checkpoint, remain unchanged.
+
+### Implementation and approved storage decision
+
+`apps/etl/transformation_attempts.py` exposes keyword-only Python services `register_attempt()`, `start_attempt()`, `complete_attempt()` and `fail_attempt()`. These reuse the existing `TransformationAttempt`, `TransformationRecordResult`, `StagingBatch` and `StagingRecord` models and the application PostgreSQL connection, never the upstream source connection. No models or migrations were added.
+
+Logical attempt identity is `(batch_id, attempt_key)`, using a genuine UUID key and an existing ingestion-scoped staged batch. A bounded, validated `SourceDateProfile` and transformation version define configuration identity. Configuration schema `interpretation-config-v1` is hashed using SHA-256 over UTF-8 JSON with sorted keys, compact separators, `ensure_ascii=False` and `allow_nan=False`. Stored configuration and hash are revalidated on reuse. Identical registrations reuse the attempt; conflicts cannot overwrite it. Registration handles the named unique-constraint race inside a savepoint.
+
+Lifecycle transitions are REGISTERED to RUNNING to SUCCEEDED, or REGISTERED/RUNNING to FAILED. Repeated starts preserve timestamps; terminal states are protected. Reserved claim fields are preserved without implementing a leasing protocol. Failure recording accepts controlled bounded diagnostics and never fabricates per-row interpretation outcomes.
+
+The owner approved **Option 2 — Outcome-and-Evidence-Only Persistence**. Each result links the batch, attempt and exact original StagingRecord, with SAFE or UNRESOLVED outcome and bounded `date-outcome-v1` evidence: timezone status, controlled timezone origin and issue code. `result_payload` remains **SQL NULL**, including on replay verification. No full transformed DataFrames, raw values, arbitrary reasons or second transformed-value serializer are persisted. SAFE means successful interpretation under the selected contract, not business validation, healing or warehouse readiness.
+
+Completion consumes an already computed `DateInterpretationResult`, rechecks accounting, source metadata, profile, exact index representation and positional coverage, and resolves original staged-record IDs by zero-based row position rather than duplicate-capable index labels. It verifies the raw staged batch through the accepted reader. One PostgreSQL atomic transaction and an attempt-level row lock protect bounded inserts of at most 1,000 results per group, ledger verification and final status/count updates. Staged count equals safe plus unresolved count equals persisted result count. Identical completion retries verify the actual committed ledger without writes; conflicting/corrupt ledgers are rejected. Original staging records remain unchanged.
+
+### Post-review hardening
+
+- **A — Exact index representation:** pandas equality could accept Decimal scale and signed-zero changes and reject a supported valid DatetimeIndex representation. The service now reuses accepted SER-v1 index/scalar encodings. Regression coverage includes Decimal scale, positive/negative zero, RangeIndex, object, nullable, datetime, duplicate-label and supported integer indexes. Source-row labels follow the accepted DateNormalizer index-iteration convention.
+- **B — Genuine first-registration race:** independent PostgreSQL connections both observe an absent attempt before competing to insert. Identical requests share one committed identity; conflicting configurations cannot overwrite the winner. Production registration logic required no change.
+- **C — SQL NULL versus JSONB null:** explicit database nullness verification rejects JSONB literal `null`, which Django can also expose as Python `None`. This preserves Option 2's SQL NULL requirement.
+
+### Recorded verification and review provenance
+
+These are owner-provided/Codex-reported local execution results from implementation and hardening, **not tests freshly executed during documentation maintenance**. The first row is owner-executed evidence; subsequent rows are Codex-reported execution evidence.
+
+| Verification stage | Result | Duration | Exit |
+| --- | --- | --- | --- |
+| Initial owner-executed focused tests | 79 passed | 15.46 seconds | Successful |
+| New hardening regressions before corrections | 10 failed, 9 passed, 79 deselected | 10.65 seconds | 1 |
+| New regressions after corrections | 19 passed, 79 deselected | 9.88 seconds | 0 |
+| Final focused attempt module | 98 passed | 19.98 seconds | 0 |
+| Related staging/transformation regressions | 483 passed | 30.31 seconds | 0 |
+| Final complete project suite | 960 passed | 82.84 seconds | 0 |
+
+Successful final runs had zero failures and zero skips. Final PostgreSQL-required runs used `DATAXAI_REQUIRE_STAGING_POSTGRES=1` and `PGCONNECT_TIMEOUT=3` with the established disposable database fixtures. Django system check, migration-drift check, Ruff, Black, isort and Git whitespace checks passed (reported exit 0). The complete suite ran once after stabilization.
+
+An earlier environment-blocked run reported **372 passed, 2 skipped and 109 setup errors** while Docker and the existing database containers were stopped. After restoring the existing Docker/PostgreSQL environment without configuration or volume changes, related regressions and the full suite passed. This setup failure remains part of the execution history and is not classified as a confirmed application regression or successful PostgreSQL verification.
+
+The owner reports that independent source review of the final submitted implementation identified no acceptance-blocking defects within the approved scope. This was source inspection, not independent PostgreSQL test execution. No additional implementation or infrastructure was recommended for 4.4.5. Review, execution evidence and formal owner acceptance remain separate decisions.
+
+### Architectural boundaries and next permitted action
+
+1. The service validates submitted interpretation structure, provenance and accounting; it does not independently rerun the transformation engine or prove semantic correctness.
+2. `DateInterpretationResult` carries no ingestion UUID. Exact execution-to-ingestion binding remains a later orchestration responsibility; persisted record IDs are resolved from the selected attempt's batch.
+3. Full transformed values are not durably materialized by this milestone.
+4. One batch may be materialized in memory; constant-memory operation is not claimed.
+5. An outer Django transaction controls ultimate commit durability.
+6. Exact index checks reuse private SER-v1 helpers and need compatibility coverage if the serializer evolves.
+7. No Celery orchestration, automatic recovery, quarantine, healing, anomaly detection, warehouse publication or HTTP API was implemented.
+8. Full Volume 4.4 and end-to-end ETL remain incomplete. These are approved scope boundaries, not missing 4.4.5 implementation.
+
+**Live Git snapshot:** `feat/etl-4.4.5-attempt-persistence`, HEAD `fe7209e11918b45d47713fcbdf23fc9d0da262ee`, the accepted 4.4.4 PR #6 merge baseline. Volume 4.4.4 was owner accepted on 2026-10-31. Before this reconciliation, `apps/etl/exceptions.py` was modified; the service, its test module and `dataxai-4.4.5-final-review.zip` were untracked. This documentation task additionally modifies only the four authorized milestone/agent Markdown files. Implementation and documentation remain uncommitted; no 4.4.5 push, PR, merge or CI success is verified.
+
+**Next permitted action:** owner acceptance review and an explicit acceptance decision. Git integration will be handled separately under owner instruction. Volume 4.4.6 and later work remain closed until explicit authorization. This reconciliation does not confer acceptance or permission to advance. No tests were rerun for this documentation-only task.
