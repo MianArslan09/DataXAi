@@ -13,9 +13,6 @@ selected attempt. One batch is materialized; this is not constant-memory process
 An enclosing transaction controls ultimate durability, including outer rollback.
 """
 
-import hashlib
-import json
-import re
 from uuid import UUID
 
 import pandas as pd
@@ -23,6 +20,15 @@ from django.core.exceptions import ValidationError
 from django.db import DEFAULT_DB_ALIAS, IntegrityError, connections, transaction
 from django.utils import timezone
 
+from etl.attempt_claims import ClaimToken, _validate_claim_state, _verify_claim
+from etl.attempt_config import _CREDENTIAL as _CREDENTIAL
+from etl.attempt_config import _IDENTIFIER as _IDENTIFIER
+from etl.attempt_config import _configuration as _configuration
+from etl.attempt_config import _hash as _hash
+from etl.attempt_config import _identifier as _identifier
+from etl.attempt_config import _require as _require
+from etl.attempt_config import _stored_profile as _stored_profile
+from etl.attempt_config import _text as _text
 from etl.exceptions import (
     AttemptConflictError,
     AttemptIntegrityError,
@@ -37,7 +43,6 @@ from etl.models import (
     StagingRecord,
     TransformationAttempt,
     TransformationRecordResult,
-    validate_attempt_configuration,
     validate_failure_diagnostics,
 )
 from etl.serialization import _index as _ser_index
@@ -56,16 +61,6 @@ from etl.transforms.date_contract import (
 
 _INSERT_BATCH_SIZE = 1000
 _MAX_ID = 2**63 - 1
-_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*\Z")
-_CREDENTIAL = re.compile(
-    r"(?i)(?:password|passwd|pwd|secret|token|api[_ -]?key|authorization)\s*[:=]"
-    r"|://|\bbearer\s+|-----BEGIN .*PRIVATE KEY"
-)
-
-
-def _require(condition, message, error=AttemptIntegrityError):
-    if not condition:
-        raise error(message)
 
 
 def _database():
@@ -78,90 +73,6 @@ def _database():
 
 def _integer(value, *, minimum=0):
     return type(value) is int and minimum <= value <= _MAX_ID
-
-
-def _text(value, limit):
-    _require(
-        type(value) is str and bool(value.strip()) and len(value) <= limit,
-        "Attempt metadata requires bounded nonblank text.",
-        AttemptRegistrationError,
-    )
-    _require(
-        not any(ord(c) < 32 or 0xD800 <= ord(c) <= 0xDFFF for c in value)
-        and not _CREDENTIAL.search(value),
-        "Attempt metadata contains unsupported or credential-bearing text.",
-        AttemptRegistrationError,
-    )
-    return value
-
-
-def _identifier(value, limit):
-    _text(value, limit)
-    _require(
-        _IDENTIFIER.fullmatch(value) is not None,
-        "Attempt codes and versions must be bounded ASCII identifiers.",
-        AttemptRegistrationError,
-    )
-    return value
-
-
-def _configuration(profile):
-    _require(
-        type(profile) is SourceDateProfile,
-        "A validated SourceDateProfile is required.",
-        AttemptRegistrationError,
-    )
-    fields = {
-        "name": _text(profile.name, 128),
-        "date_order": profile.date_order,
-        "timezone": profile.timezone,
-        "provenance": profile.provenance,
-    }
-    for key in ("date_order", "timezone", "provenance"):
-        if fields[key] is not None:
-            _text(fields[key], 16_384)
-    try:
-        SourceDateProfile(**fields)  # Recheck even a tampered frozen profile.
-        config = {"schema": "interpretation-config-v1", "date_profile": fields}
-        validate_attempt_configuration(config)
-    except (ETLError, ValidationError):
-        raise AttemptRegistrationError("Invalid or oversized date profile configuration.") from None
-    return config
-
-
-def _hash(config):
-    canonical = json.dumps(
-        config, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _stored_profile(attempt):
-    config = attempt.configuration
-    _require(
-        type(config) is dict
-        and set(config) == {"schema", "date_profile"}
-        and config["schema"] == "interpretation-config-v1"
-        and type(config["date_profile"]) is dict
-        and set(config["date_profile"]) == {"name", "date_order", "timezone", "provenance"},
-        "The stored attempt configuration is invalid.",
-    )
-    try:
-        fields = config["date_profile"]
-        # Validate primitive types before the profile constructor evaluates settings.
-        for value in fields.values():
-            if value is not None:
-                _text(value, 16_384)
-        profile = SourceDateProfile(**fields)
-        expected = _configuration(profile)
-        _identifier(attempt.transformation_version, 128)
-    except ETLError:
-        raise AttemptIntegrityError("The stored attempt configuration is invalid.") from None
-    _require(
-        config == expected and attempt.configuration_hash == _hash(expected),
-        "The stored attempt configuration hash is inconsistent.",
-    )
-    return profile
 
 
 def _attempts():
@@ -249,7 +160,7 @@ def register_attempt(
 
 
 def start_attempt(*, attempt_id: int) -> TransformationAttempt:
-    """Start REGISTERED once; preserve RUNNING timestamps and all reserved claims."""
+    """Start unclaimed REGISTERED once; RUNNING retries never acquire ownership."""
     _database()
     with transaction.atomic(using=DEFAULT_DB_ALIAS):
         attempt = _locked(attempt_id)
@@ -259,6 +170,7 @@ def start_attempt(*, attempt_id: int) -> TransformationAttempt:
             AttemptConflictError,
         )
         _no_results(attempt)
+        _validate_claim_state(attempt)
         if attempt.status == "REGISTERED":
             attempt.status = "RUNNING"
             attempt.started_at = timezone.now()
@@ -521,12 +433,15 @@ def complete_attempt(
     attempt_id: int,
     result: DateInterpretationResult,
     transformation_version: str,
+    claim: ClaimToken | None = None,
 ) -> TransformationAttempt:
     """Atomically persist a complete outcome ledger or verify a successful retry.
 
     Every result_payload stays SQL NULL. Evidence stores only schema, enum status,
     controlled origin and issue code; original values/reasons/datetimes are omitted.
     Caller must not concurrently mutate the supplied result during this call.
+    Managed writes require a live claim before work and immediately before the
+    terminal write. Verified terminal retries are read-only and need no claim.
     """
     _database()
     version = _identifier(transformation_version, 128)
@@ -542,6 +457,8 @@ def complete_attempt(
             "Only RUNNING attempts can complete; FAILED is terminal.",
             AttemptConflictError,
         )
+        if attempt.status == "RUNNING":
+            _verify_claim(attempt, claim)
         ledger = _ledger(attempt, result)
         safe = sum(outcome == "SAFE" for _, outcome, _ in ledger)
         unresolved = len(ledger) - safe
@@ -565,9 +482,12 @@ def complete_attempt(
                 batch_size=_INSERT_BATCH_SIZE,
             )
         _verify_ledger(attempt, ledger)
+        finished_at = _verify_claim(attempt, claim) or timezone.now()
         attempt.status = "SUCCEEDED"
         attempt.safe_row_count, attempt.unresolved_row_count = safe, unresolved
-        attempt.finished_at = timezone.now()
+        attempt.finished_at = finished_at
+        attempt.claim_owner = None
+        attempt.claim_expires_at = None
         attempt.save(
             using=DEFAULT_DB_ALIAS,
             update_fields=[
@@ -575,6 +495,8 @@ def complete_attempt(
                 "safe_row_count",
                 "unresolved_row_count",
                 "finished_at",
+                "claim_owner",
+                "claim_expires_at",
                 "updated_at",
             ],
         )
@@ -614,12 +536,14 @@ def fail_attempt(
     failure_code: str,
     failure_stage: str,
     diagnostics: dict | None = None,
+    claim: ClaimToken | None = None,
 ) -> TransformationAttempt:
-    """Record controlled failure without manufacturing outcomes or claim behavior.
+    """Record controlled failure without manufacturing outcomes.
 
     Codes/stages are ASCII identifiers <=64 characters. Optional diagnostics allow
     only nonnegative signed-bigint row_position/column_position/input_rows and a
     Boolean retryable flag. No exception, traceback or free-text values are accepted.
+    Managed writes require current ownership; identical terminal retries are read-only.
     """
     _database()
     code, stage = _identifier(failure_code, 64), _identifier(failure_stage, 64)
@@ -631,6 +555,8 @@ def fail_attempt(
             "A successful attempt cannot be failed.",
             AttemptConflictError,
         )
+        if attempt.status != "FAILED":
+            _verify_claim(attempt, claim)
         _no_results(attempt)
         if attempt.status == "FAILED":
             _require(
@@ -640,13 +566,16 @@ def fail_attempt(
                 AttemptConflictError,
             )
             return attempt
+        finished_at = _verify_claim(attempt, claim) or timezone.now()
         attempt.status = "FAILED"
         attempt.failure_code, attempt.failure_stage, attempt.failure_diagnostics = (
             code,
             stage,
             details,
         )
-        attempt.finished_at = timezone.now()
+        attempt.finished_at = finished_at
+        attempt.claim_owner = None
+        attempt.claim_expires_at = None
         attempt.save(
             using=DEFAULT_DB_ALIAS,
             update_fields=[
@@ -655,6 +584,8 @@ def fail_attempt(
                 "failure_stage",
                 "failure_diagnostics",
                 "finished_at",
+                "claim_owner",
+                "claim_expires_at",
                 "updated_at",
             ],
         )

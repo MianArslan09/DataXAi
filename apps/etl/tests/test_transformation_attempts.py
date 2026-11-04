@@ -301,13 +301,9 @@ def test_registration_rechecks_stored_configuration(make_case, damage):
     assert _snapshot(attempt) == before
 
 
-def test_start_is_idempotent_and_reserved_claims_remain_unchanged(make_case):
+def test_unclaimed_start_is_idempotent_and_completion_preserves_generation_zero(make_case):
     case = make_case()
     attempt = _register(case)
-    expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-    TransformationAttempt.objects.filter(pk=attempt.pk).update(
-        claim_generation=7, claim_owner="reserved-owner", claim_expires_at=expiry
-    )
     running = service.start_attempt(attempt_id=attempt.pk)
     assert running.status == "RUNNING" and running.started_at.tzinfo is not None
     before = _snapshot(running)
@@ -317,9 +313,9 @@ def test_start_is_idempotent_and_reserved_claims_remain_unchanged(make_case):
     assert again.started_at == running.started_at and _snapshot(again) == before
     succeeded = _complete(running, case[3])
     assert (succeeded.claim_generation, succeeded.claim_owner, succeeded.claim_expires_at) == (
-        7,
-        "reserved-owner",
-        expiry,
+        0,
+        None,
+        None,
     )
     with pytest.raises(AttemptConflictError):
         service.start_attempt(attempt_id=attempt.pk)
@@ -610,14 +606,14 @@ def test_successful_completion_is_rolled_back_by_outer_transaction(make_case):
 
 
 @pytest.mark.parametrize("started", [False, True])
-def test_controlled_failure_is_atomic_idempotent_and_preserves_claims(make_case, started):
+def test_unclaimed_failure_is_atomic_idempotent_and_preserves_generation_zero(make_case, started):
     case = make_case()
     attempt = _running(case) if started else _register(case)
     started_at = attempt.started_at
-    TransformationAttempt.objects.filter(pk=attempt.pk).update(claim_generation=4)
     failed = _failure(attempt)
     assert failed.status == "FAILED" and failed.finished_at.tzinfo is not None
-    assert failed.started_at == started_at and failed.claim_generation == 4
+    assert failed.started_at == started_at and failed.claim_generation == 0
+    assert failed.claim_owner is failed.claim_expires_at is None
     assert failed.safe_row_count is failed.unresolved_row_count is None
     assert not failed.results.exists()
     before = _snapshot(failed)
