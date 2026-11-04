@@ -143,3 +143,13 @@ The approved Option 2 service registers, starts, completes and fails attempts us
 Recorded evidence: 98 focused, 483 related and 960 full-suite tests passed, with zero failures/skips in final runs; Django, migration-drift and quality checks passed. Independent final source review found no acceptance-blocking defects; no independent test execution is claimed. See the 2026-11-02 `PROJECT_STATE.md` checkpoint for provenance, earlier failed/environment-blocked runs and architectural boundaries. No tests were rerun for this documentation update.
 
 Live branch is `feat/etl-4.4.5-attempt-persistence` at `fe7209e`, the accepted 4.4.4 PR #6 merge baseline. Current 4.4.5 work remains uncommitted; no push, PR, merge or CI success is verified. Next action is explicit owner acceptance review, with Git integration separately authorized. **Volume 4.4.6 and later gates remain closed.** Full Volume 4.4/end-to-end ETL remain incomplete.
+
+## 2026-11-04 — Volume 4.4.6: Formal Owner Acceptance
+
+<!-- DATA X AI CHECKPOINT 2026-11-04 V4.4.6 OWNER ACCEPTED -->
+
+**FORMALLY OWNER ACCEPTED — 2026-11-04.** Volume 4.4.6 is implemented and verified according to earlier reported execution: 159 focused, 483 related and 1,021 full-suite tests passed, zero failures/skips; Django, migration-drift and quality checks passed. Independent source review found no acceptance-blocking defects. No tests were rerun for this documentation update.
+
+Accepted scope: PostgreSQL claim acquisition, renewal, expired-claim recovery, generation fencing and safe completion/failure integration, with shared `attempt_config.py` integrity validation before claim changes. No new models, migrations, Redis locks, Celery orchestration or warehouse loading. Recovery is explicit; legacy unclaimed RUNNING work is not automatically recovered; fencing covers cooperating service writers and does not guarantee exactly-once computation.
+
+Volume 4.4.5 is formally accepted and merged through PR #7 (`cb20b6a`). This latest checkpoint supersedes historical pending/closed status statements without changing them. Detailed evidence and limitations are in the dated `PROJECT_STATE.md` checkpoint. Volume 4.4.6 Git integration remains pending on `feat/etl-4.4.6-recovery-fencing`; no PR/merge completion is claimed. **4.4.7 remains a future gated milestone, not authorized by this acceptance.** Full Volume 4.4/end-to-end ETL remain incomplete.

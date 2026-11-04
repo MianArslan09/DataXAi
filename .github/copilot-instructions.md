@@ -66,3 +66,13 @@ This latest gate supersedes historical 4.4.5-proposed/unauthorized/not-implement
 Preserve Option 2 outcome/evidence-only storage with SQL NULL result payloads, exact positional lineage, immutable raw staging data and accepted serializer/model/transform contracts. Do not treat SAFE as validation or warehouse readiness. Live branch/HEAD is `feat/etl-4.4.5-attempt-persistence` / `fe7209e`, the accepted 4.4.4 PR #6 merge baseline; current 4.4.5 changes remain uncommitted and no PR/merge/CI verification is claimed.
 
 Next action is owner acceptance review; Git integration requires separate owner instructions. **Do not begin Volume 4.4.6 or later work without explicit authorization.** Full Volume 4.4/end-to-end ETL remain incomplete. All existing architecture, preservation, scope-control and Git rules remain in force.
+
+## 2026-11-04 — Volume 4.4.6: Formal Owner Acceptance
+
+<!-- DATA X AI CHECKPOINT 2026-11-04 V4.4.6 OWNER ACCEPTED -->
+
+**Volume 4.4.6 is FORMALLY OWNER ACCEPTED — 2026-11-04**, following implementation, PostgreSQL verification, configuration-integrity hardening and independent source review with no blocking defects. Volume 4.4.5 is formally accepted and merged through PR #7 (`cb20b6a`). This latest gate supersedes earlier pending/closed statements while preserving historical records.
+
+Preserve accepted PostgreSQL claim/renewal/recovery and generation-fencing behavior, safe completion/failure integration, shared `attempt_config.py` validation and existing persistence guarantees. See the 2026-11-04 `docs/PROJECT_STATE.md` checkpoint for prior evidence (159 focused, 483 related, 1,021 full-suite passes), quality checks and limitations. No tests were rerun for this update.
+
+Git integration of 4.4.6 remains pending on `feat/etl-4.4.6-recovery-fencing`; acceptance does not establish PR/merge completion. **Volume 4.4.7 remains a future gated milestone requiring explicit owner authorization.** Keep all existing architecture, preservation and Git rules; full ETL remains incomplete.

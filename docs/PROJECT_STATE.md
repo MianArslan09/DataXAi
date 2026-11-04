@@ -1373,3 +1373,19 @@ The owner reports that independent source review of the final submitted implemen
 **Live Git snapshot:** `feat/etl-4.4.5-attempt-persistence`, HEAD `fe7209e11918b45d47713fcbdf23fc9d0da262ee`, the accepted 4.4.4 PR #6 merge baseline. Volume 4.4.4 was owner accepted on 2026-10-31. Before this reconciliation, `apps/etl/exceptions.py` was modified; the service, its test module and `dataxai-4.4.5-final-review.zip` were untracked. This documentation task additionally modifies only the four authorized milestone/agent Markdown files. Implementation and documentation remain uncommitted; no 4.4.5 push, PR, merge or CI success is verified.
 
 **Next permitted action:** owner acceptance review and an explicit acceptance decision. Git integration will be handled separately under owner instruction. Volume 4.4.6 and later work remain closed until explicit authorization. This reconciliation does not confer acceptance or permission to advance. No tests were rerun for this documentation-only task.
+
+## 2026-11-04 — Volume 4.4.6: Formal Owner Acceptance
+
+<!-- DATA X AI CHECKPOINT 2026-11-04 V4.4.6 OWNER ACCEPTED -->
+
+**FORMALLY OWNER ACCEPTED — 2026-11-04.** The owner explicitly accepted Volume 4.4.6 after implementation, PostgreSQL verification, configuration-integrity hardening and independent source review with no acceptance-blocking defects. Status: IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED according to recorded execution evidence, and FORMALLY OWNER ACCEPTED. Source review is distinct from independent test execution; no independent test rerun is claimed.
+
+Volume 4.4.5 was formally accepted and merged through PR #7 (`cb20b6a`). This checkpoint supersedes earlier pending-acceptance and closed-gate statements for 4.4.5/4.4.6; those historical entries remain unchanged.
+
+The accepted 4.4.6 scope comprises PostgreSQL claim acquisition, renewal, expired-claim recovery, ownership-generation fencing and safe completion/failure integration. Shared `attempt_config.py` validates configuration integrity on the locked attempt before claims change. Existing persistence and source-lineage guarantees are preserved. No new database models, migrations, Redis locks, Celery orchestration or warehouse loading were introduced.
+
+**Earlier Codex-reported execution evidence:** 159 focused tests, 483 related regressions and 1,021 full-suite tests passed, with zero failures/skips in final runs. Django system, migration-drift, Ruff, Black, isort and whitespace checks passed. These are prior implementation/hardening results, not fresh executions during this documentation update. Owner acceptance is a separate explicit decision.
+
+**Accepted limitations:** recovery is explicitly invoked; legacy unclaimed RUNNING attempts are not automatically recovered; fencing protects cooperating service writers; exactly-once computation is not guaranteed. Full Volume 4.4 and end-to-end ETL remain incomplete.
+
+**Git and next gate:** current branch is `feat/etl-4.4.6-recovery-fencing`; 4.4.6 Git integration remains pending. No 4.4.6 PR or merge completion is claimed. Git/PR integration will be handled separately by the owner. Volume 4.4.7 remains a future gated milestone requiring explicit authorization. This task edits only the four milestone/agent documents and runs no application tests or code-quality suites.
