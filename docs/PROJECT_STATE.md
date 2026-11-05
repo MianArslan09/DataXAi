@@ -1389,3 +1389,78 @@ The accepted 4.4.6 scope comprises PostgreSQL claim acquisition, renewal, expire
 **Accepted limitations:** recovery is explicitly invoked; legacy unclaimed RUNNING attempts are not automatically recovered; fencing protects cooperating service writers; exactly-once computation is not guaranteed. Full Volume 4.4 and end-to-end ETL remain incomplete.
 
 **Git and next gate:** current branch is `feat/etl-4.4.6-recovery-fencing`; 4.4.6 Git integration remains pending. No 4.4.6 PR or merge completion is claimed. Git/PR integration will be handled separately by the owner. Volume 4.4.7 remains a future gated milestone requiring explicit authorization. This task edits only the four milestone/agent documents and runs no application tests or code-quality suites.
+
+## 2026-11-05 — Volume 4.4.7: Real UCI/PostgreSQL Loading & Performance Verification — Formal Owner Acceptance
+
+<!-- DATA X AI CHECKPOINT 2026-11-05 V4.4.7 OWNER ACCEPTED -->
+
+**FORMALLY OWNER ACCEPTED — 2026-11-05.** The owner explicitly accepted Volume 4.4.7 after completed implementation and owner-executed verification. Status: IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED and UCI VERIFIED for the scoped verification harness; technical verification PASSED. Formal acceptance is an owner decision, separate from test evidence and Git integration. This checkpoint supersedes earlier statements that 4.4.7 was a future/unimplemented gate, without changing historical records or accepting other milestones.
+
+### Accepted scope and evidence provenance
+
+`scripts/verify_staging_real_data.py` exercises the accepted sequential flow: `ExcelSource -> stage_source_batch -> load_source_batch -> AliasMapper -> DateNormalizer(SourceDateProfile()) -> register_attempt -> claim_attempt -> complete_attempt`, followed by PostgreSQL reconciliation. Transformation uses reconstructed persisted batches, including their original metadata. Stable ingestion/batch and attempt identities support verified retries; fresh extraction timestamps do not invalidate matching content. No source timezone is inferred. The runner requires explicit write authorization and matching expected database name/host/port, rejects normal application/source database targets, and does not provision, migrate, clean or finalize ingestions. It reports stage timings and replaces sanitized JSON reports atomically.
+
+`apps/etl/tests/test_verify_staging_real_data.py` covers fixture accounting, replay, interruption/resume, claim states, target guards, mixed SAFE/UNRESOLVED interpretation, corruption and sanitized failures. Accepted SER-v1, raw staging, positional lineage, recovery, idempotency and claim-fencing contracts remain unchanged. This is verification of raw staging and interpretation-outcome persistence, not clean warehouse publication or a new production orchestration layer.
+
+All execution results below are **OWNER-EXECUTED evidence supplied for this acceptance**. During this documentation task, the implementation/tests and these existing local JSON reports were inspected read-only; matching report fields corroborate the supplied benchmark results:
+
+- `staging-447-fixture-d3fb5aff-6e90-4861-96f0-5dbde289dc80.json`
+- `staging-447-pilot-c47fca48-c723-41ee-8aa7-373c23ded68e.json`
+- `staging-447-full-c47fca48-c723-41ee-8aa7-373c23ded68e.json`
+
+These files remain local evidence, not proposed source-control additions. Tests, database queries, migrations and benchmarks were **not rerun** during documentation maintenance. The final exit code and separate PostgreSQL reconciliation below are owner-reported execution evidence, not fresh executions or fields independently established by reading JSON.
+
+### Owner-executed quality and isolated-database verification
+
+| Check | Reported result |
+| --- | --- |
+| Full project regression | 1,044 passed |
+| Focused PostgreSQL tests | 23 passed |
+| Ruff, Black, isort | Passed |
+| Django system check | 0 issues |
+| Migration drift | None detected |
+| Benchmark database preparation | Existing ETL migrations applied successfully |
+
+The separately provisioned PostgreSQL database was `dataxai_benchmark_447` at `127.0.0.1:5432`, distinct from the application and upstream source databases. No database credentials are recorded here.
+
+### Fixture, pilot and full benchmark
+
+The real input was **UCI Online Retail II**, both original workbook sheets, with configured batch size **50,000**, transformation version `uci-dates-v1` and the default unconfigured `SourceDateProfile` (no inferred date order or timezone).
+
+- Source file SHA-256: `bcbe73b35f5b7babf197fb0cb983a11f5d9ff929078d4aa53d171b1f2df2e980`.
+- Real-data ingestion UUID: `c47fca48-c723-41ee-8aa7-373c23ded68e`.
+
+| Measurement | Small fixture | Real-data pilot | Full dataset, resume execution |
+| --- | --- | --- | --- |
+| Status | PASSED | PILOT_PASSED | PASSED |
+| Verified batches | 2 | 1 | 22/22 |
+| Source rows | 18 | 50,000 | 1,067,371 |
+| Staged rows | 18 | 50,000 | 1,067,371 |
+| Reconstructed rows | 18 | 50,000 | 1,067,371 |
+| Persisted outcome rows | 18 | 50,000 | 1,067,371 |
+| SAFE date outcomes | 18 | 50,000 | 1,067,371 |
+| UNRESOLVED date outcomes | 0 | 0 | 0 |
+| Complete configured dataset verified | true (fixture only) | false | true |
+| Elapsed seconds | Not used as a performance baseline | 1,910.0201 | 6,025.6266 |
+| Python-traced peak bytes | Not used as a performance baseline | 630,185,357; tracing enabled | NOT MEASURED |
+| Whole-database size delta, bytes | Not used as a performance baseline | 47,693,824 | 970,440,704 |
+
+The pilot's PostgreSQL attempt SUCCEEDED. The full run verified/reused batch 0 and its successful attempt; batches 1–21 and their attempts were new. The owner independently reconciled PostgreSQL totals of **22 staged batches, 1,067,371 staged records and 1,067,371 outcome rows**. The final runner exit code was **0**. Every full-report batch is VERIFIED, with no date issues; all 1,067,371 dates have `TIMEZONE_UNKNOWN`, not falsely assigned UTC.
+
+**Interpretation of performance:** 6,025.6266 seconds measures the **resume execution**, including verification of already persisted batch 0. It is not a clean, fresh-ingestion time for the entire dataset. `1,067,371 / 6,025.6266` is approximately **177.14 reconciled rows/second**, using the runner's reported overall elapsed time, including file hashing and verification; it is not pure insertion throughput. The traced pilot and untraced resume execution are different measurement conditions and do not establish an optimization speedup.
+
+**Interpretation of SAFE:** successful date interpretation under the current contract does not establish complete business-rule validation, cleanliness, repair or warehouse readiness. Unknown timezone is compatible with SAFE; downstream loading policies remain separate. Report totals describe fully reconciled batches, and a failed/incomplete execution can already have committed raw records; database-backed resume remains authoritative.
+
+### Accepted limitations and proposed investigation
+
+Processing remains performance-intensive: staging, reconstruction, integrity verification and outcome persistence have significant overhead. Batch **9** recorded approximately **369.1 seconds** for source verification (`369.0686684` in the report); its root cause is **unconfirmed**. Resume may rescan the workbook. One batch may occupy multiple in-memory representations; constant-memory operation is not claimed.
+
+The full run measured neither Python-traced peak memory nor actual peak process RSS. The pilot's traced allocation peak is not process RSS. Database growth is a whole-database measurement, including other storage activity, not exact per-table or per-ingestion storage. No full automated healing, quarantine, anomaly detection, analytics/warehouse publication, API orchestration or complete production ETL workflow was added. Full Volume 4.4 and end-to-end ETL remain incomplete.
+
+A post-acceptance investigation of stage overhead and the batch-9 anomaly is **PROPOSED**, not implemented or authorized optimization work. Any later proposal must preserve accepted SER-v1, raw staging, lineage, recovery, idempotency and fencing guarantees and obtain separate owner authorization.
+
+### Git status and next permitted activity
+
+At reconciliation, branch `feat/etl-4.4.7-staging-verification` is at `358677f` (the Volume 4.4.6 PR #8 merge). The two 4.4.7 Python files remain untracked, alongside existing review ZIPs and benchmark JSON/log evidence. **Volume 4.4.7 Git integration is pending / NOT YET CONFIRMED**; no implementation commit, push, PR, GitHub CI result or merge is claimed. This supersedes the earlier 4.4.6-integration-pending statement only as current status; the dated historical record is retained.
+
+Next activity is controlled documentation review and separately owner-directed Git/PR integration. Benchmark databases, datasets, JSON reports, logs and ZIPs are not source-control additions. No later milestone or optimization implementation is authorized. This task changes only milestone Markdown and the two brief agent-gate reconciliations; source code, tests, infrastructure, evidence and the Excel tracker remain untouched.

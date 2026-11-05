@@ -119,3 +119,11 @@ Next action is owner acceptance review; Git integration requires separate owner 
 Preserve accepted PostgreSQL claim/renewal/recovery and generation-fencing behavior, safe completion/failure integration, shared `attempt_config.py` validation and existing persistence guarantees. See the 2026-11-04 `docs/PROJECT_STATE.md` checkpoint for prior evidence (159 focused, 483 related, 1,021 full-suite passes), quality checks and limitations. No tests were rerun for this update.
 
 Git integration of 4.4.6 remains pending on `feat/etl-4.4.6-recovery-fencing`; acceptance does not establish PR/merge completion. **Volume 4.4.7 remains a future gated milestone requiring explicit owner authorization.** Keep all existing architecture, preservation and Git rules; full ETL remains incomplete.
+
+## 2026-11-05 — Volume 4.4.7: Formal Owner Acceptance
+
+<!-- DATA X AI CHECKPOINT 2026-11-05 V4.4.7 OWNER ACCEPTED -->
+
+**Volume 4.4.7 is FORMALLY OWNER ACCEPTED — 2026-11-05; technical verification PASSED.** This current gate supersedes the earlier future-milestone statement without rewriting history. Volume 4.4.6 is merged through PR #8 (`358677f`). See the dated `docs/PROJECT_STATE.md` checkpoint for owner-executed tests, isolated PostgreSQL/UCI evidence, resume-only performance interpretation and accepted limitations; no tests were rerun for this documentation task.
+
+Volume 4.4.7 Git integration remains pending / NOT YET CONFIRMED on `feat/etl-4.4.7-staging-verification`. Next activity is controlled documentation and separately owner-directed Git/PR integration. Performance investigation is PROPOSED, not authorized implementation; later milestones remain gated. Preserve accepted SER-v1, staging, positional lineage, recovery, idempotency and claim fencing. SAFE is date interpretation, not full validation or warehouse readiness; the full ETL pipeline remains incomplete. Keep local benchmark reports, logs, datasets and review archives out of source-control changes. All existing preservation and Git rules remain in force.
