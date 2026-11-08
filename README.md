@@ -4,7 +4,7 @@
 
 Final Year Project — BS Software Engineering, National University of Modern Languages (NUML), Faisalabad Campus.
 
-Detects eight classes of data-quality faults in e-commerce batch pipelines, repairs what it safely can via a deterministic strategy registry, quarantines what it can't, narrates every repair in plain language, and feeds the resulting clean data into demand forecasting (Prophet) and customer lifetime value estimation (XGBoost). Full design rationale lives in [`docs/handbook/`](docs/handbook/).
+The project aims to detect eight classes of data-quality faults in e-commerce pipelines, repair eligible records, quarantine unresolved cases, and use cleaned data for demand forecasting and customer lifetime value estimation. The [engineering handbook](docs/handbook/) describes the design.
 
 **Team:** M Arslan Ahmad ([@Arslan](https://github.com)) · Fatima Munawar
 **Supervisor:** Mr. Usama Shahzore, Dept. of Software Engineering, NUML Faisalabad
@@ -70,7 +70,7 @@ dataxai/
 
 ## Status
 
-Building in public, one milestone at a time. See [`docs/handbook/`](docs/handbook/) for the full 18-volume roadmap and what's done vs. pending.
+As of November 8, 2026, Volume 4.4.7 is integrated and the owner has accepted performance Gates 1–5. Performance-series Git integration is pending. The full ETL workflow remains incomplete. See [project state](docs/PROJECT_STATE.md) for benchmark evidence and the outstanding replay-threshold acknowledgment, and the [roadmap](docs/PROJECT_ROADMAP.md) for milestone boundaries.
 
 ## License
 

@@ -1464,3 +1464,47 @@ A post-acceptance investigation of stage overhead and the batch-9 anomaly is **P
 At reconciliation, branch `feat/etl-4.4.7-staging-verification` is at `358677f` (the Volume 4.4.6 PR #8 merge). The two 4.4.7 Python files remain untracked, alongside existing review ZIPs and benchmark JSON/log evidence. **Volume 4.4.7 Git integration is pending / NOT YET CONFIRMED**; no implementation commit, push, PR, GitHub CI result or merge is claimed. This supersedes the earlier 4.4.6-integration-pending statement only as current status; the dated historical record is retained.
 
 Next activity is controlled documentation review and separately owner-directed Git/PR integration. Benchmark databases, datasets, JSON reports, logs and ZIPs are not source-control additions. No later milestone or optimization implementation is authorized. This task changes only milestone Markdown and the two brief agent-gate reconciliations; source code, tests, infrastructure, evidence and the Excel tracker remain untouched.
+
+## 2026-11-08 — Performance optimization Gates 1–5 closed and owner accepted
+
+**Detailed technical evidence:** [Performance Gates 1-5 closure and acceptance record](performance/GATES_1_5_CLOSURE_2026-11-08.md).
+
+This checkpoint supersedes the November 5 development gate. Local Git history verifies Volume 4.4.7 is **GIT INTEGRATED** through PR #9 at `44c3d60`, following implementation `712c355` and acceptance documentation `828c11d`. The owner accepted 4.4.7 on November 5. Its UCI/PostgreSQL resume run reconciled 1,067,371 rows across 22 batches in 6,025.63 seconds, including reuse of batch zero. Fresh full-dataset throughput and the cause of the batch 9 timing outlier remain unverified.
+
+### Gate evidence and provenance
+
+All five performance gates are **IMPLEMENTED, TESTED, LOCALLY VERIFIED and OWNER ACCEPTED**. Implementation descriptions below reflect the live code. Test results are historical local execution reports supplied by the owner or recorded by Codex. Formal acceptance comes from the owner. No execution was repeated for this documentation checkpoint.
+
+| Gate | Implemented scope | Recorded verification |
+|---|---|---|
+| 1 | Added opt-in bounded metrics and allowlisted call counting to the staging verifier. Stage and SQL timings overlap; calls mode adds diagnostic overhead. | Owner reported 36 focused PostgreSQL and 1,057 full-suite passes. Smoke evidence established separate fresh and replay workloads. |
+| 2 | The raw writer captures one validated SER-v1 payload and fingerprints that same snapshot before staging. | Focused serializer, persistence and profiler checks; 1,060 full-suite passes. The 48-run paired comparison recorded median elapsed reductions of 11.37%–18.54%. Owner accepted November 7. |
+| 3 | Reader and writer replay digest the stored payload only after strict decoding and whole-payload reconstruction equality. Completion still retrieves staging independently. | Owner reported 342 focused, 269 integration and 1,074 full-suite passes. Core encodes/decodes fell from 12/7 to 8/5 fresh and 15/9 to 9/6 on replay. The 48-run Gate 2 comparison recorded median reductions of 16.51%–27.09%. |
+| 4 | Database-free probes measured construction, storage conversion, index selection and fingerprint costs. At the scalar check, equal exact dictionaries with exclusively built-in string keys and values can match directly. Every other case executes the canonical JSON comparison. | 32 profiler and 1,125 full-suite passes reported. JSON calls per 5k fingerprint fell from 170,007 to 100,007. Across 48 PostgreSQL runs, reductions from version medians were 9.52%, 11.24%, 4.23% and 19.20% for 1k fresh/replay and 5k fresh/replay respectively. Owner accepted the 5k fresh exception: median paired saving 0.472 s, below 1.810 s. |
+| 5 | Reused the same guard after pandas dtype construction in `_decode()`. Each cell is regenerated and checked; an unproven match falls back to canonical JSON in the original operand order. | Codex reported 313 focused passes with three PostgreSQL cases deselected. Owner reported 632 PostgreSQL integration passes (111.43 s), 1,148 full-suite passes (402.36 s), and successful Ruff, Black, isort and whitespace checks. The pinned 5k fingerprint used 30,007 JSON calls and retained the accepted digest. **Formally owner accepted November 8.** |
+
+### Gate 5 paired PostgreSQL results and qualifications
+
+The database-free Gate 5 comparison produced 24 child reports. The PostgreSQL comparison produced 48. Read-only inspection of the saved PostgreSQL reports confirmed that each bounded pilot reconciled source, staged, reconstructed and outcome rows. Trial zero was excluded; all 20 measured pairs favored Gate 5. The percentage compares independent version medians. The paired saving is the median of five within-pair differences.
+
+| Rows and mode | Gate 4 median (s) | Gate 5 median (s) | Reduction from medians | Median paired saving (s) |
+|---|---:|---:|---:|---:|
+| 1,000 fresh | 4.068 | 3.492 | 14.14% | 0.395 |
+| 1,000 replay | 3.757 | 3.140 | 16.42% | 0.432 |
+| 5,000 fresh | 16.726 | 13.254 | 20.76% | 1.645 |
+| 5,000 replay | 14.845 | 12.516 | 15.69% | 2.374 |
+
+- **5k fresh:** 1.645 s exceeded Gate 5’s proposed 0.936 s threshold but fell below the older 1.810 s historical variability reference. The owner explicitly accepted this qualification.
+- **5k replay: proposed threshold NOT MET; separate owner acknowledgment PENDING.** The observed 2.374 s exceeded the older 1.339 s reference but fell below Gate 5’s proposed 3.166 s threshold. The November 8 acceptance stands. The fresh qualification does not grant a replay waiver.
+
+CPU medians decreased in all four workloads. SQL counts matched within each workload (43 and 51 fresh at 1k and 5k respectively, 27 on replay). Peak working-set medians increased slightly on replay and decreased on fresh runs. SQL wrapper time excludes parts of fetching and commit. These are five-pair local comparisons on bounded workbook batches; full-scale optimized throughput, unresolved-heavy workloads and production contention remain **NOT VERIFIED**.
+
+The local evidence archive contains the comparisons under `Gate2/gate2-20261107T044002Z-b2689756`, `Gate3/gate3-20261108T040239Z-9ea5ab2d`, `Gate4/gate4-20261108T072658Z-f2e8714c`, `Gate5/gate5-20261108T155055Z-ecfbaee4` and `Gate5/gate5-pg-20261108T163258Z-175c9b96`. Gate 1 evidence is attributed to prior execution reports and its preserved patch. The Gate 5 PostgreSQL paired and summary CSV checksums match the supplied closure report.
+
+### Contracts, integration and next action
+
+SER-v1 preserves supported scalar, dtype, axis and row representations. Its content digest excludes batch number and extraction time; ingestion UUID and batch number identify a logical batch. Atomic staging, verified idempotent replay, independent persisted reads, positional lineage, rollback, explicitly invoked recovery and claim-generation fencing remain in force. SAFE denotes successful date interpretation. Validation, anomaly detection, healing, quarantine and analytics remain separate responsibilities; Volume 4.4 and the full ETL workflow remain incomplete.
+
+At reconciliation, Gates 1–5 remain **Git integration PENDING** on `codex/etl-bounded-profiling` at `44c3d60`, with unstaged implementation changes and local evidence. No performance-series PR, CI result, merge or deployment is asserted. The ignored repository workbook `DataXAi Volume Tracker.xlsx` matches the owner’s dated reconciled copy byte for byte. Continue using the existing repository workbook as the tracking reference.
+
+**Next action:** owner documentation review and separate acknowledgment of the replay-threshold deviation. Git/PR integration planning requires separate owner direction. Gate 6, Volume 4.5 and further optimization or benchmarking remain unauthorized.

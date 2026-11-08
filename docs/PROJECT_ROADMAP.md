@@ -166,3 +166,9 @@ Volume 4.4.5 is formally accepted and merged through PR #7 (`cb20b6a`). This lat
 - **Git integration:** pending / NOT YET CONFIRMED for 4.4.7 on `feat/etl-4.4.7-staging-verification` at `358677f`; implementation files remain untracked. Acceptance does not establish a commit, push, PR, merge or GitHub CI result.
 
 **Next permitted activity:** controlled documentation review and separately owner-directed Git/PR integration. Post-acceptance performance investigation is PROPOSED; no optimization or later milestone implementation is authorized. Preserve accepted SER-v1, staging, lineage, recovery, idempotency and fencing contracts. Full Volume 4.4/end-to-end ETL remain incomplete; healing, quarantine, anomaly detection, analytics publication, API orchestration and downstream loading policy are not completed by this harness.
+
+## 2026-11-08 — Performance-phase closure
+
+Volume 4.4.7 is owner accepted and integrated through PR #9 (`44c3d60`). Gates 1–5 are implemented, locally verified and owner accepted. Their work covers bounded profiling, writer snapshot reuse, validated persisted-payload hashing, and exact flat-string comparisons before and after dtype construction. Performance-series Git integration is **PENDING**.
+
+Gate 5 acceptance on November 8 includes the historical fresh-run qualification. The proposed 5k replay criterion was **NOT MET** (2.374 s saved against 3.166 s); separate owner acknowledgment is pending. See the [November 8 project-state checkpoint](PROJECT_STATE.md#2026-11-08--performance-optimization-gates-15-closed-and-owner-accepted). Next comes owner documentation review and separately authorized Git integration planning. Volume 4.4 remains incomplete; no Gate 6 or Volume 4.5 work is authorized.
