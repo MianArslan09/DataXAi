@@ -1,5 +1,7 @@
 """Real PostgreSQL effects, locking and rollback; no source database writes."""
 
+import hashlib
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -95,6 +97,43 @@ def _payload(staged):
             .values_list("record_payload", flat=True)
         ),
     }
+
+
+def _corrupt_with_matching_digest(staged, damage):
+    """Corrupt disposable storage and independently hash the exact persisted content."""
+    original_hash = staged.content_hash
+    if damage == "scalar":
+        row = staged.records.get(row_position=0)
+        record = row.record_payload
+        record["values"][0] = {"type": "int", "value": "01"}
+        staged.records.filter(pk=row.pk).update(record_payload=record)
+    elif damage == "extracted_at":
+        header = {**staged.header, "extracted_at": {"type": "none"}}
+        StagingBatch.objects.filter(pk=staged.pk).update(header=header)
+    else:
+        raise AssertionError(damage)
+    content = _payload(staged)
+    del content["extracted_at"], content["batch_number"]
+    wire = json.dumps(
+        content, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+    digest = hashlib.sha256(wire.encode("utf-8")).hexdigest()
+    assert (digest == original_hash) == (damage == "extracted_at")
+    StagingBatch.objects.filter(pk=staged.pk).update(content_hash=digest)
+    return digest
+
+
+@pytest.mark.parametrize("damage", ["scalar", "extracted_at"])
+def test_replay_rejects_malformed_content_with_matching_digest(ingestion, batch, damage):
+    staged = staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    digest = _corrupt_with_matching_digest(staged, damage)
+    before = _payload(staged)
+    positions = list(staged.records.order_by("row_position").values_list("pk", "row_position"))
+    with pytest.raises(StagingIntegrityError, match="stored staging representation"):
+        staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    assert _payload(staged) == before and staged.content_hash == digest
+    after = list(staged.records.order_by("row_position").values_list("pk", "row_position"))
+    assert after == positions
 
 
 def test_atomic_persistence_preserves_ser_v1_and_uses_bounded_inserts(
@@ -262,16 +301,41 @@ def test_invalid_or_missing_identity_does_not_create_an_ingestion(ingestion, bat
     assert not StagingBatch.objects.filter(ingestion=ingestion).exists()
 
 
+def test_input_mutation_after_capture_persists_the_original_snapshot(ingestion, batch, monkeypatch):
+    payload = encode_source_batch(batch)
+    digest = fingerprint_source_batch(batch)
+    prepare = staging._encode_and_fingerprint
+
+    def capture_then_edit(source):
+        pair = prepare(source)
+        assert not connections["default"].in_atomic_block
+        source.data.iat[0, 0] = "edited after capture"
+        source.data.index.name = "edited index"
+        return pair
+
+    with monkeypatch.context() as patch:
+        patch.setattr(staging, "_encode_and_fingerprint", capture_then_edit)
+        staged = staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    assert _payload(staged) == payload
+    assert staged.content_hash == digest
+    assert fingerprint_source_batch(batch) != digest
+    with pytest.raises(StagingConflictError):
+        staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    assert _payload(staged) == payload and staged.content_hash == digest
+
+
 @pytest.mark.parametrize("damage", ["count", "position"])
 def test_encoded_accounting_checked_before_writes(ingestion, batch, monkeypatch, damage):
-    payload = encode_source_batch(batch)
+    payload, digest = staging._encode_and_fingerprint(batch)
     if damage == "count":
         payload["row_count"] += 1
     else:
         payload["records"][1]["row_position"] = 3
-    monkeypatch.setattr(staging, "encode_source_batch", lambda _: payload)
-    with pytest.raises(StagingIntegrityError):
-        staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    monkeypatch.setattr(staging, "_encode_and_fingerprint", lambda _: (payload, digest))
+    with CaptureQueriesContext(connections["default"]) as queries:
+        with pytest.raises(StagingIntegrityError):
+            staging.stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    assert not queries.captured_queries
     assert not StagingBatch.objects.filter(ingestion=ingestion).exists()
 
 

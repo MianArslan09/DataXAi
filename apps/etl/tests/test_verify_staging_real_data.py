@@ -2,14 +2,18 @@
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from django.db import connections
+from django.conf import settings
+from django.db import DatabaseError, connections
 from django.test.utils import CaptureQueriesContext
 
+from etl import transformation_attempts
 from etl.attempt_claims import claim_attempt
+from etl.exceptions import StagingIntegrityError
 from etl.models import (
     StagingBatch,
     StagingIngestion,
@@ -18,6 +22,7 @@ from etl.models import (
     TransformationRecordResult,
 )
 from etl.tests.test_staging_constraints import staging_postgres as staging_postgres
+from etl.tests.test_staging_persistence import _corrupt_with_matching_digest
 from etl.tests.test_staging_persistence import application_postgres as application_postgres
 from etl.transformation_attempts import fail_attempt, start_attempt
 from etl.transforms.date_contract import SourceDateProfile
@@ -179,7 +184,11 @@ def test_mixed_interpretation_retains_unresolved_rows(runner, options, monkeypat
     assert _snapshot() == before
 
 
-def test_interruption_preserves_committed_batches_and_resumes(runner, options, monkeypatch):
+@pytest.mark.parametrize("profile_mode", ["off", "calls"])
+def test_interruption_preserves_committed_batches_and_resumes(
+    runner, options, monkeypatch, profile_mode
+):
+    options = _set(options, "--profile-mode", profile_mode)
     original = runner._process
 
     def interrupt(args, batch, item):
@@ -351,4 +360,285 @@ def test_outcome_tamper_is_detected_and_never_repaired(runner, options):
         )
     before = _snapshot()
     assert runner.main(_set(options, "--mode", "resume")) == 1
+    assert _snapshot() == before
+
+
+def test_completion_rechecks_storage_after_successful_runner_read(runner, options, monkeypatch):
+    read = runner.load_source_batch
+    complete = runner.complete_attempt
+    reads = []
+    rejected_reads = []
+    before_completion = []
+
+    def observe_read(**identity):
+        batch = read(**identity)
+        reads.append((identity["ingestion_id"], batch.batch_number))
+        return batch
+
+    def corrupt_then_complete(**kwargs):
+        attempt = TransformationAttempt.objects.select_related("batch").get(pk=kwargs["attempt_id"])
+        assert reads == [(attempt.batch.ingestion_id, attempt.batch.batch_number)]
+        assert attempt.status == "RUNNING" and not attempt.results.exists()
+        _corrupt_with_matching_digest(attempt.batch, "scalar")
+        before_completion.append(_snapshot())
+        return complete(**kwargs)
+
+    def observe_ledger_read(**identity):
+        try:
+            return read(**identity)
+        except StagingIntegrityError:
+            rejected_reads.append((identity["ingestion_id"], identity["batch_number"]))
+            raise
+
+    monkeypatch.setattr(runner, "load_source_batch", observe_read)
+    monkeypatch.setattr(runner, "complete_attempt", corrupt_then_complete)
+    monkeypatch.setattr(transformation_attempts, "load_source_batch", observe_ledger_read)
+    assert runner.main(options) == 1
+    assert _report(options)["failure_code"] == "ATTEMPT_INTEGRITY_ERROR"
+    assert len(reads) == 1 and rejected_reads == reads
+    assert before_completion == [_snapshot()]
+    attempt = TransformationAttempt.objects.get(batch__ingestion_id=reads[0][0])
+    assert attempt.status == "RUNNING" and attempt.finished_at is None
+    assert attempt.safe_row_count is None and attempt.unresolved_row_count is None
+    assert not attempt.results.exists()
+
+
+def test_profiling_off_preserves_existing_report_and_does_not_install_hooks(
+    runner, options, monkeypatch
+):
+    def forbidden(*args):
+        pytest.fail("Disabled profiling must not construct instrumentation")
+
+    monkeypatch.setattr(runner, "_Profiler", forbidden)
+    assert runner._arguments(options).profile_mode == "off"
+    assert runner.main(options) == 0
+    before = _snapshot()
+    assert runner.main(_set(_set(options, "--mode", "resume"), "--profile-mode", "off")) == 0
+    report = _report(options)
+    assert "profiling" not in report
+    assert all("profiling" not in batch for batch in report["batches"])
+    assert report["process_peak_rss_bytes"] is None
+    assert report["process_peak_rss_note"] == "not measured"
+    assert _snapshot() == before
+
+
+def _sql_calls(profile, kinds):
+    return sum(
+        metric["execute_calls"]
+        for stage in profile["sql"].values()
+        for kind, metric in stage.items()
+        if kind in kinds
+    )
+
+
+@pytest.mark.parametrize("mode", ["metrics", "calls"])
+def test_profiled_fixture_and_read_only_replay_preserve_data_and_restore_settings(
+    runner, options, monkeypatch, mode
+):
+    options = _set(options, "--profile-mode", mode)
+    connection = connections["default"]
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(connection, "force_debug_cursor", True)
+    old_queries = list(connection.queries_log)
+    old_wrappers = list(connection.execute_wrappers)
+    old_profile = sys.getprofile()
+    assert runner.main(options) == 0
+    assert settings.DEBUG is True and connection.force_debug_cursor is True
+    assert list(connection.queries_log) == old_queries
+    assert connection.execute_wrappers == old_wrappers and sys.getprofile() is old_profile
+    assert runner._active_profile.get() is None
+    report = _report(options)
+    assert report["counts"]["outcome_rows"] == report["counts"]["source_rows"] == 18
+    assert sum(b["timezone_statuses"]["TIMEZONE_UNKNOWN"] for b in report["batches"]) == 18
+    profile = report["profiling"]
+    assert profile["schema"] == runner.PROFILE_SCHEMA and profile["mode"] == mode
+    assert profile["elapsed"]["wall_seconds"] > 0
+    assert profile["elapsed"]["cpu_seconds"] >= 0
+    assert "Never sum" in profile["notes"]["overlap"]
+    assert _sql_calls(profile["totals"], {"INSERT", "UPDATE"}) > 0
+    for batch in report["batches"]:
+        metrics = batch["profiling"]
+        assert set(metrics["stages"]) == runner._STAGES
+        assert all(m["calls"] == 1 for m in metrics["stages"].values())
+        assert all(
+            m["wall_seconds"] >= 0 and m["cpu_seconds"] >= 0 for m in metrics["stages"].values()
+        )
+        if mode == "calls":
+            functions = metrics["functions"]
+            # Runner and ledger each reconstruct independently before hashing stored content.
+            assert functions["ser_encode_core"]["calls"] == 8
+            assert functions["ser_decode_validate"]["calls"] == 5
+            assert functions["ser_fingerprint"]["calls"] == 2
+            assert functions["ser_encode_and_fingerprint"]["calls"] == 3
+            assert functions["ser_decode_and_fingerprint"]["calls"] == 2
+            assert functions["ser_validated_payload_fingerprint"]["calls"] == 5
+            assert functions["read_reconstruct_verify"]["calls"] == 2
+            assert functions["fingerprint_sha256"]["calls"] == 10
+            assert functions["fingerprint_utf8"]["calls"] == 5
+            assert functions["ledger_build_validate"]["calls"] == 1
+            assert functions["staging_bulk_insert"]["calls"] == 1
+            assert functions["outcome_bulk_insert"]["calls"] == 1
+            assert functions["postgres_fetch"]["calls"] > 0
+            assert functions["storage_json_decode_validate"]["calls"] > 0
+            for metric in functions.values():
+                for clock in ("wall", "cpu"):
+                    assert (
+                        0
+                        <= metric[f"exclusive_observed_{clock}_seconds"]
+                        <= metric[f"inclusive_{clock}_seconds"]
+                    )
+        else:
+            assert metrics["functions"] == {}
+    before = _snapshot()
+    assert runner.main(_set(options, "--mode", "resume")) == 0
+    resumed = _report(options)
+    assert resumed["counts"] == report["counts"]
+    assert resumed["dispositions"] == {"batch_verified_reused": 2, "attempt_verified_reused": 2}
+    assert _sql_calls(resumed["profiling"]["totals"], {"INSERT", "UPDATE", "DELETE"}) == 0
+    if mode == "calls":
+        for batch in resumed["batches"]:
+            functions = batch["profiling"]["functions"]
+            assert functions["ser_encode_core"]["calls"] == 9
+            assert functions["ser_decode_validate"]["calls"] == 6
+            assert functions["ser_fingerprint"]["calls"] == 2
+            assert functions["ser_encode_and_fingerprint"]["calls"] == 3
+            assert functions["ser_decode_and_fingerprint"]["calls"] == 3
+            assert functions["ser_validated_payload_fingerprint"]["calls"] == 6
+            assert functions["fingerprint_utf8"]["calls"] == 6
+            assert functions["fingerprint_sha256"]["calls"] == 12
+            assert functions["read_reconstruct_verify"]["calls"] == 2
+            assert functions["ledger_verify"]["calls"] == 1
+    assert _snapshot() == before
+    assert sys.getprofile() is old_profile and runner._active_profile.get() is None
+
+
+def test_allowlisted_nested_times_and_constant_aggregate_size(runner, monkeypatch):
+    clock = [0.0]
+
+    def child():
+        clock[0] += 5
+
+    def parent():
+        clock[0] += 2
+        child()
+        clock[0] += 3
+
+    profiler = runner._Profiler("calls")
+    profiler.codes = {parent.__code__: "parent", child.__code__: "child"}
+    with monkeypatch.context() as patch:
+        patch.setattr(runner.time, "perf_counter", lambda: clock[0])
+        patch.setattr(runner.time, "process_time", lambda: clock[0] / 2)
+        with profiler.activate():
+            for _ in range(200):
+                parent()
+    functions = profiler.total["functions"]
+    assert set(functions) == {"parent", "child"} and profiler.stack == []
+    assert functions["parent"] == {
+        "calls": 200,
+        "inclusive_wall_seconds": 2000,
+        "inclusive_cpu_seconds": 1000,
+        "exclusive_observed_wall_seconds": 1000,
+        "exclusive_observed_cpu_seconds": 500,
+    }
+    assert functions["child"]["inclusive_wall_seconds"] == 1000
+    assert profiler.elapsed == {"wall_seconds": 2000, "cpu_seconds": 1000}
+
+
+def test_sql_aggregation_excludes_parameters_and_debug_query_retention(runner, monkeypatch):
+    connection = connections["default"]
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(connection, "force_debug_cursor", True)
+    before = list(connection.queries_log)
+    profiler = runner._Profiler("metrics")
+    with profiler.activate():
+        with connection.cursor() as cursor:
+            for _ in range(20):
+                cursor.execute("SELECT %s /* SYNTHETIC-SQL-SECRET */", ["RAW-CUSTOMER-TOKEN"])
+                assert cursor.fetchone() == ("RAW-CUSTOMER-TOKEN",)
+            cursor.executemany("SELECT %s", [(1,), (2,)])
+            with pytest.raises(DatabaseError):
+                cursor.execute("SELECT 1 / 0")
+    metric = profiler.total["sql"]["outside_stages"]["SELECT"]
+    assert metric["execute_calls"] == 22 and metric["executemany_calls"] == 1
+    assert metric["failed_calls"] == 1 and metric["wall_seconds"] > 0
+    assert len(profiler.total["sql"]) == 1
+    assert list(connection.queries_log) == before
+    encoded = json.dumps(profiler.snapshot())
+    assert "RAW-CUSTOMER-TOKEN" not in encoded and "SYNTHETIC-SQL-SECRET" not in encoded
+    assert "SELECT %s" not in encoded
+
+
+@pytest.mark.parametrize("available", [True, False])
+def test_windows_memory_measurement_and_controlled_unavailability(runner, monkeypatch, available):
+    def memory():
+        if not available:
+            raise OSError("SYNTHETIC-SECRET")
+        return 123456
+
+    monkeypatch.setattr(runner.sys, "platform", "win32")
+    monkeypatch.setattr(runner, "_windows_peak_working_set", memory)
+    result = runner._process_memory()
+    assert result["peak_working_set_bytes"] == (123456 if available else None)
+    assert result["status"] == ("MEASURED" if available else "UNAVAILABLE")
+    assert "process lifetime" in result["scope"]
+    assert "SYNTHETIC-SECRET" not in json.dumps(result)
+
+
+def test_memory_is_not_fabricated_on_unsupported_platform(runner, monkeypatch):
+    monkeypatch.setattr(runner.sys, "platform", "unsupported")
+    result = runner._process_memory()
+    assert result["peak_working_set_bytes"] is None and result["status"] == "UNSUPPORTED_PLATFORM"
+
+
+@pytest.mark.parametrize("mode", ["metrics", "calls"])
+def test_failure_restores_instrumentation_and_sanitizes_profile(
+    runner, options, monkeypatch, capsys, mode
+):
+    connection = connections["default"]
+    old_profile = sys.getprofile()
+    old_wrappers = list(connection.execute_wrappers)
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(connection, "force_debug_cursor", True)
+    before_queries = list(connection.queries_log)
+
+    def broken(*args):
+        # Fail inside observed functions, exercising exception unwinding too.
+        from etl.serialization import encode_source_batch
+
+        encode_source_batch("SYNTHETIC-SECRET-CUSTOMER-TOKEN")
+
+    monkeypatch.setattr(runner, "_source_check", broken)
+    assert runner.main(_set(options, "--profile-mode", mode)) == 1
+    report = _report(options)
+    assert report["status"] == "FAILED" and report["counts"] == {}
+    assert not report["complete_dataset_verified"]
+    assert report["profiling"]["elapsed"]["wall_seconds"] > 0
+    output = json.dumps(report) + capsys.readouterr().out
+    assert "SYNTHETIC-SECRET" not in output and "owner-token" not in output
+    assert connection.execute_wrappers == old_wrappers and sys.getprofile() is old_profile
+    assert settings.DEBUG is True and connection.force_debug_cursor is True
+    assert list(connection.queries_log) == before_queries
+    assert runner._active_profile.get() is None
+
+
+def test_existing_profiler_is_not_overwritten_and_conflict_prevents_writes(runner, options):
+    before = _snapshot()
+    prior = sys.getprofile()
+
+    def existing(frame, event, arg):
+        pass
+
+    sys.setprofile(existing)
+    try:
+        assert runner.main(_set(options, "--profile-mode", "calls")) == 1
+        assert sys.getprofile() is existing
+    finally:
+        sys.setprofile(prior)
+    assert _report(options)["failure_code"] == "PROFILE_ALREADY_ACTIVE"
+    assert _snapshot() == before
+
+
+def test_invalid_profile_mode_rejected_before_writes(runner, options):
+    before = _snapshot()
+    assert runner.main(_set(options, "--profile-mode", "SYNTHETIC-SECRET")) == 2
     assert _snapshot() == before

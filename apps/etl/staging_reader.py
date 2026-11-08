@@ -16,7 +16,7 @@ from django.db import DEFAULT_DB_ALIAS, connections
 
 from etl.exceptions import SerializationError, StagingBatchNotFoundError, StagingIntegrityError
 from etl.models import StagingBatch, StagingRecord
-from etl.serialization import decode_source_batch, fingerprint_source_batch
+from etl.serialization import _decode_and_fingerprint
 from etl.sources.contract import SourceBatch
 
 _FETCH_CHUNK_SIZE = 1000
@@ -59,9 +59,9 @@ def _reconstruct(staged):
         len(records) == staged.row_count,
         "The persisted staging row count is inconsistent.",
     )
-    reconstructed = decode_source_batch({**header, "records": records})
+    reconstructed, digest = _decode_and_fingerprint({**header, "records": records})
     _require(
-        fingerprint_source_batch(reconstructed) == staged.content_hash,
+        digest == staged.content_hash,
         "The reconstructed staging fingerprint disagrees with its stored hash.",
     )
     return reconstructed

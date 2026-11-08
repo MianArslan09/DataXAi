@@ -11,6 +11,13 @@ source-reference manifest binds label, file digest, basename and batch size.
 Only reconstructed batches are transformed. No whole-run transaction, scheduler,
 heartbeat, automatic FAILED transition or ingestion finalization is provided.
 One batch is materialized, often in several representations; not constant memory.
+
+Optional --profile-mode metrics adds stage wall/CPU and aggregate SQL measurements.
+The calls mode also observes an allowlist of existing functions with sys.setprofile;
+it is substantially more expensive and intended for small diagnostic selections.
+Neither mode is an uninstrumented throughput baseline. Nested measurements overlap.
+Run this standalone, without other threads using Django settings or the connection.
+Profiling suppresses debug-query capture temporarily and restores it on exit.
 """
 
 import argparse
@@ -24,6 +31,8 @@ import tempfile
 import time
 import tracemalloc
 from collections import Counter
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict
 from pathlib import Path
 from uuid import UUID, uuid5
@@ -67,6 +76,22 @@ from etl.transforms import AliasMapper, DateNormalizer  # noqa: E402
 from etl.transforms.date_contract import SourceDateProfile  # noqa: E402
 
 REPORT_SCHEMA = "dataxai.staging-benchmark-v1"
+PROFILE_SCHEMA = "dataxai.staging-profile-v1"
+_active_profile = ContextVar("staging_profile", default=None)
+_STAGES = frozenset(
+    {
+        "extract",
+        "stage",
+        "reconstruct",
+        "source_verification",
+        "alias_mapping",
+        "date_interpretation",
+        "register",
+        "claim",
+        "complete_or_verify",
+        "reconcile",
+    }
+)
 
 
 class VerificationError(Exception):
@@ -76,6 +101,268 @@ class VerificationError(Exception):
 def _require(condition, code):
     if not condition:
         raise VerificationError(code)
+
+
+def _windows_peak_working_set():
+    """Process-lifetime resident working-set high-water mark, not Python allocations."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Counters(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
+        ]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel.GetCurrentProcess.argtypes = []
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    psapi.GetProcessMemoryInfo.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(Counters),
+        wintypes.DWORD,
+    ]
+    psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+    counters = Counters()
+    counters.cb = ctypes.sizeof(counters)
+    if not psapi.GetProcessMemoryInfo(
+        kernel.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+    ):
+        raise OSError("PROCESS_MEMORY_UNAVAILABLE")
+    return counters.PeakWorkingSetSize
+
+
+def _process_memory():
+    value, status = None, "UNSUPPORTED_PLATFORM"
+    if sys.platform == "win32":
+        try:
+            value = _windows_peak_working_set()
+            status = "MEASURED"
+        except (OSError, AttributeError):
+            status = "UNAVAILABLE"
+    return {
+        "peak_working_set_bytes": value,
+        "status": status,
+        "scope": "process lifetime, including work before profiling; not a per-batch peak",
+    }
+
+
+def _function_allowlist():
+    # Code identities only: no wrappers, monkeypatches, locals, arguments or source strings.
+    # These private observation points are diagnostic; tests guard compatibility.
+    import psycopg
+    from django.db.models.query import QuerySet
+
+    from etl import serialization, staging, staging_reader, transformation_attempts
+    from etl.models import EscapedJSONTextField
+
+    functions = {
+        serialization.encode_source_batch: "ser_encode_validated",
+        serialization._encode: "ser_encode_core",
+        serialization.decode_source_batch: "ser_decode_public",
+        serialization._decode: "ser_decode_validate",
+        serialization._json: "ser_canonical_json",
+        serialization.fingerprint_source_batch: "ser_fingerprint",
+        serialization._encode_and_fingerprint: "ser_encode_and_fingerprint",
+        serialization._decode_and_fingerprint: "ser_decode_and_fingerprint",
+        serialization._fingerprint_validated_payload: "ser_validated_payload_fingerprint",
+        staging.stage_source_batch: "staging_service",
+        staging_reader.load_source_batch: "read_reconstruct_verify",
+        transformation_attempts._ledger: "ledger_build_validate",
+        transformation_attempts._verify_ledger: "ledger_verify",
+        transformation_attempts.complete_attempt: "outcome_finalize_or_verify",
+        EscapedJSONTextField.from_db_value: "storage_json_decode_validate",
+        EscapedJSONTextField.get_prep_value: "storage_json_encode",
+        QuerySet.bulk_create: "bulk_insert",
+    }
+    for cursor in (psycopg.Cursor, psycopg.ServerCursor):
+        for method in ("fetchone", "fetchmany", "fetchall"):
+            functions[getattr(cursor, method)] = "postgres_fetch"
+    return {function.__code__: label for function, label in functions.items()}
+
+
+def _measurements():
+    return {"stages": {}, "sql": {}, "functions": {}}
+
+
+class _Profiler:
+    """Fixed-key aggregates, plus O(allowlisted call depth) numeric stack entries.
+
+    No per-query/per-call history or frame references are retained. Each batch has
+    the same bounded metric tables as the execution total. SQL and function data
+    are nested inside stage times; they are NOT independent additive costs.
+    """
+
+    def __init__(self, mode):
+        self.mode = mode
+        self.total = _measurements()
+        self.batch = None
+        self.stage_name = "outside_stages"
+        self.stack = []
+        self.codes = _function_allowlist() if mode == "calls" else {}
+        self.wall_started = self.cpu_started = None
+        self.elapsed = None
+
+    def _tables(self, kind):
+        yield self.total[kind]
+        if self.batch is not None:
+            yield self.batch[kind]
+
+    def begin_batch(self):
+        self.batch = _measurements()
+
+    @contextmanager
+    def stage(self, name):
+        _require(name in _STAGES, "INVALID_PROFILE_STAGE")
+        previous, self.stage_name = self.stage_name, name
+        wall, cpu = time.perf_counter(), time.process_time()
+        try:
+            yield
+        finally:
+            wall, cpu = time.perf_counter() - wall, time.process_time() - cpu
+            for table in self._tables("stages"):
+                metric = table.setdefault(name, Counter())
+                metric.update(calls=1, wall_seconds=wall, cpu_seconds=cpu)
+            self.stage_name = previous
+
+    def _execute(self, execute, sql, params, many, context):
+        # Classify only a fixed set of SQL verbs; never retain SQL/params/context.
+        match = (
+            re.match(
+                r"\s*(SELECT|INSERT|UPDATE|DELETE|SAVEPOINT|RELEASE|ROLLBACK)\b", sql, re.IGNORECASE
+            )
+            if isinstance(sql, str)
+            else None
+        )
+        kind = match[1].upper() if match else "OTHER"
+        wall, cpu, failed = time.perf_counter(), time.process_time(), True
+        try:
+            result = execute(sql, params, many, context)
+            failed = False
+            return result
+        finally:
+            wall, cpu = time.perf_counter() - wall, time.process_time() - cpu
+            for table in self._tables("sql"):
+                metric = table.setdefault(self.stage_name, {}).setdefault(kind, Counter())
+                metric.update(
+                    execute_calls=1,
+                    executemany_calls=int(many),
+                    failed_calls=int(failed),
+                    wall_seconds=wall,
+                    cpu_seconds=cpu,
+                )
+
+    def _observe(self, frame, event, arg):
+        code = frame.f_code
+        label = self.codes.get(code)
+        token = id(frame)
+        if event.startswith("c_"):
+            # Observe only the fingerprint's direct UTF-8/SHA calls, not file hashing
+            # or arbitrary C functions. Do not keep the bound callable (or its data).
+            if label != "ser_validated_payload_fingerprint":
+                return
+            name = getattr(arg, "__name__", "")
+            label = {"encode": "fingerprint_utf8", "hexdigest": "fingerprint_sha256"}.get(name)
+            if arg is hashlib.sha256:
+                label = "fingerprint_sha256"
+            token = id(arg)
+        if label is None:
+            return
+        if label == "bulk_insert":
+            label = {
+                "stage": "staging_bulk_insert",
+                "complete_or_verify": "outcome_bulk_insert",
+            }.get(self.stage_name, "bulk_insert")
+        if event in ("call", "c_call"):
+            self.stack.append([token, label, time.perf_counter(), time.process_time(), 0.0, 0.0])
+        elif event in ("return", "c_return", "c_exception") and self.stack:
+            _require(self.stack[-1][0] == token, "PROFILE_STACK_MISMATCH")
+            _, label, wall, cpu, child_wall, child_cpu = self.stack.pop()
+            wall, cpu = time.perf_counter() - wall, time.process_time() - cpu
+            for table in self._tables("functions"):
+                metric = table.setdefault(label, Counter())
+                metric.update(
+                    calls=1,
+                    inclusive_wall_seconds=wall,
+                    inclusive_cpu_seconds=cpu,
+                    exclusive_observed_wall_seconds=max(0.0, wall - child_wall),
+                    exclusive_observed_cpu_seconds=max(0.0, cpu - child_cpu),
+                )
+            if self.stack:
+                self.stack[-1][4] += wall
+                self.stack[-1][5] += cpu
+
+    @contextmanager
+    def activate(self):
+        # Standalone/single-thread harness only. Do not replace an existing profiler.
+        _require(self.mode != "calls" or sys.getprofile() is None, "PROFILE_ALREADY_ACTIVE")
+        connection = connections[DEFAULT_DB_ALIAS]
+        old_debug, old_cursor = settings.DEBUG, connection.force_debug_cursor
+        token = _active_profile.set(self)
+        self.wall_started, self.cpu_started = time.perf_counter(), time.process_time()
+        try:
+            settings.DEBUG = False
+            connection.force_debug_cursor = False
+            with connection.execute_wrapper(self._execute):
+                if self.mode == "calls":
+                    sys.setprofile(self._observe)
+                yield
+        finally:
+            if self.mode == "calls":
+                sys.setprofile(None)
+            self.elapsed = {
+                "wall_seconds": time.perf_counter() - self.wall_started,
+                "cpu_seconds": time.process_time() - self.cpu_started,
+            }
+            self.stack.clear()
+            _active_profile.reset(token)
+            connection.force_debug_cursor = old_cursor
+            settings.DEBUG = old_debug
+
+    def snapshot(self):
+        return {
+            "schema": PROFILE_SCHEMA,
+            "mode": self.mode,
+            "debug_query_capture": "temporarily_disabled",
+            "elapsed": self.elapsed
+            or {
+                "wall_seconds": time.perf_counter() - self.wall_started,
+                "cpu_seconds": time.process_time() - self.cpu_started,
+            },
+            "totals": self.total,
+            "process_memory": _process_memory(),
+            "notes": {
+                "overlap": "Stages, SQL and functions overlap. Never sum nested inclusive times.",
+                "exclusive_observed": (
+                    "Subtracts only allowlisted child calls, not all callees; not pure self time."
+                ),
+                "sql": (
+                    "Django execute/executemany invocations, including failed calls; many counts "
+                    "as one. Excludes driver-internal SQL, complete fetch/conversion and commits "
+                    "outside execute_wrapper. Not pure PostgreSQL server time."
+                ),
+                "functions": (
+                    "Allowlisted current-thread calls only in calls mode. Fetch includes driver "
+                    "conversion; storage JSON conversion is separate but can nest other metrics. "
+                    "Fingerprint includes validated encoding; SHA/UTF-8/JSON are nested subsets. "
+                    "Bulk insert includes ORM/field preparation and SQL, not terminal commit."
+                ),
+                "overhead": (
+                    "Instrumented diagnostics, not baseline throughput. Calls mode observes all "
+                    "profile events but retains only fixed-key aggregates; overhead can be high. "
+                    "CPU is process-wide. Use a fresh standalone process for memory comparisons."
+                ),
+            },
+        }
 
 
 class _Parser(argparse.ArgumentParser):
@@ -102,6 +389,7 @@ def _arguments(argv):
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--expected-sha256")
     parser.add_argument("--trace-memory", action="store_true")
+    parser.add_argument("--profile-mode", choices=("off", "metrics", "calls"), default="off")
     args = parser.parse_args(argv)
     _require(args.authorize_benchmark_writes, "WRITE_AUTHORIZATION_REQUIRED")
     _require(
@@ -308,6 +596,9 @@ def _reconcile(staged, attempt, result):
 
 
 def _write_report(path, report):
+    profiler = _active_profile.get()
+    if profiler is not None:
+        report["profiling"] = profiler.snapshot()
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -331,6 +622,10 @@ def _write_report(path, report):
 def _timed(durations, name, operation):
     started = time.perf_counter()
     try:
+        profiler = _active_profile.get()
+        if profiler is not None:
+            with profiler.stage(name):
+                return operation()
         return operation()
     finally:
         durations[name] = time.perf_counter() - started
@@ -450,7 +745,12 @@ def main(argv=None):
     if tracing:
         tracemalloc.start()
     database_checked = False
+    instrumentation = ExitStack()
+    profiler = None
     try:
+        if args.profile_mode != "off":
+            profiler = _Profiler(args.profile_mode)
+            instrumentation.enter_context(profiler.activate())
         _write_report(args.report, report)  # Ensure reporting works before any DB mutation.
         _database_guard(args)
         database_checked = True
@@ -470,8 +770,10 @@ def main(argv=None):
             _ingestion(args, reference)
             iterator = iter(source.extract())
             while args.max_batches is None or len(report["batches"]) < args.max_batches:
+                if profiler is not None:
+                    profiler.begin_batch()
                 extraction = time.perf_counter()
-                raw = next(iterator, None)
+                raw = _timed({}, "extract", lambda: next(iterator, None))
                 if raw is None:
                     break
                 item = {
@@ -479,6 +781,8 @@ def main(argv=None):
                     "status": "INCOMPLETE",
                     "seconds": {"extract": time.perf_counter() - extraction},
                 }
+                if profiler is not None:
+                    item["profiling"] = profiler.batch
                 report["batches"].append(item)
                 _require(raw.batch_number == len(report["batches"]) - 1, "BATCH_SEQUENCE_MISMATCH")
                 _process(args, raw, item)
@@ -528,6 +832,8 @@ def main(argv=None):
             code = "ETL_VERIFICATION_ERROR"
         report["status"], report["failure_code"] = "FAILED", code
     finally:
+        if profiler is not None:
+            profiler.batch = None
         report["elapsed_seconds"] = time.perf_counter() - started
         report["verified_rows_per_second"] = (
             report["counts"].get("source_rows", 0) / report["elapsed_seconds"]
@@ -558,6 +864,14 @@ def main(argv=None):
                 )
             except Exception:
                 report["database_size_after_bytes"] = None
+        instrumentation.close()
+        if profiler is not None and profiler.elapsed is not None:
+            report["profiling"] = profiler.snapshot()
+            memory = report["profiling"]["process_memory"]
+            report["process_peak_rss_bytes"] = memory["peak_working_set_bytes"]
+            report["process_peak_rss_note"] = (
+                "Windows peak working set; " + memory["scope"] + "; " + memory["status"]
+            )
         logging.disable(old_logging)
     if report["status"] == "FAILED":
         report["complete_dataset_verified"] = False
