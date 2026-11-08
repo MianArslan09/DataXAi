@@ -219,6 +219,17 @@ def _scalar(value, path):
     raise SerializationError(f"SER-v1 {path}: unsupported scalar type")
 
 
+def _same_flat_string_token(left, right):
+    """An affirmative match has identical sorted-key JSON without rendering it."""
+    if type(left) is not dict or type(right) is not dict:
+        return False
+    for token in (left, right):
+        for key, value in token.items():
+            if type(key) is not str or type(value) is not str:
+                return False
+    return left == right
+
+
 def _read_scalar(value, path):
     _require(type(value) is dict and type(value.get("type")) is str, path, "invalid scalar tag")
     tag = value["type"]
@@ -319,9 +330,10 @@ def _read_scalar(value, path):
             result = result.replace(fold=_integer(value["fold"], path)).as_unit(unit)
     else:
         raise SerializationError(f"SER-v1 {path}: unsupported scalar tag")
-    # Exact JSON comparison also distinguishes bool from int in malformed metadata.
+    regenerated = _scalar(result, path)
+    # All other comparisons retain the canonical predicate, including bool versus int.
     _require(
-        _json(_scalar(result, path)) == _json(value),
+        _same_flat_string_token(regenerated, value) or _json(regenerated) == _json(value),
         path,
         "noncanonical or unreconstructable scalar representation",
     )
@@ -516,8 +528,11 @@ def _decode(payload):
         array = _array(items, dtype)
         for i, value in enumerate(array):
             path = f"row[{i}].column[{c}]"
+            regenerated = _scalar(value, path)
+            supplied = records[i]["values"][c]
             _require(
-                _json(_scalar(value, path)) == _json(records[i]["values"][c]),
+                _same_flat_string_token(regenerated, supplied)
+                or _json(regenerated) == _json(supplied),
                 path,
                 "values incompatible with declared dtype",
             )
@@ -586,12 +601,33 @@ def decode_source_batch(payload: dict) -> SourceBatch:
         ) from None
 
 
+def _fingerprint_validated_payload(payload: dict) -> str:
+    """Hash the content of a locally owned payload after complete SER-v1 validation."""
+    content = {
+        key: value for key, value in payload.items() if key not in {"batch_number", "extracted_at"}
+    }
+    return hashlib.sha256(_json(content).encode("utf-8")).hexdigest()
+
+
+def _encode_and_fingerprint(batch: SourceBatch) -> tuple[dict, str]:
+    """Return a fresh, validated SER-v1 payload and the digest of its content.
+
+    The caller owns the complete payload, including extraction provenance. Derive
+    the digest from this snapshot so later edits to the input frame cannot affect it.
+    """
+    payload = encode_source_batch(batch)
+    return payload, _fingerprint_validated_payload(payload)
+
+
+def _decode_and_fingerprint(payload: dict) -> tuple[SourceBatch, str]:
+    """Decode first: the decoder checks the entire payload against the reconstructed batch."""
+    batch = decode_source_batch(payload)
+    return batch, _fingerprint_validated_payload(payload)
+
+
 def fingerprint_source_batch(batch: SourceBatch) -> str:
     """SHA-256 of canonical typed content; excludes batch number and extraction time.
 
     This content fingerprint does not replace logical ingestion/batch identity.
     """
-    payload = encode_source_batch(batch)
-    del payload["batch_number"]
-    del payload["extracted_at"]
-    return hashlib.sha256(_json(payload).encode("utf-8")).hexdigest()
+    return _encode_and_fingerprint(batch)[1]

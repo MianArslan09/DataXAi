@@ -1,9 +1,14 @@
 """PostgreSQL readback integrity using synthetic batches and disposable databases."""
 
+import hashlib
+import os
+import sys
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
+from types import ModuleType
 from uuid import uuid4
 
 import pandas as pd
@@ -19,6 +24,7 @@ from etl.models import StagingBatch, StagingIngestion, StagingRecord
 from etl.serialization import encode_source_batch, fingerprint_source_batch
 from etl.staging import stage_source_batch
 from etl.tests.test_staging_constraints import staging_postgres as staging_postgres
+from etl.tests.test_staging_persistence import _corrupt_with_matching_digest
 from etl.tests.test_staging_persistence import application_postgres as application_postgres
 from etl.tests.test_staging_persistence import batch as batch
 from etl.tests.test_staging_persistence import ingestion as ingestion
@@ -171,6 +177,8 @@ def test_empty_batch_preserves_structure_and_metadata(ingestion, batch):
     "damage",
     [
         "missing_record",
+        "extra_record",
+        "reordered_records",
         "position",
         "row_count",
         "source_name",
@@ -178,6 +186,8 @@ def test_empty_batch_preserves_structure_and_metadata(ingestion, batch):
         "extracted_at",
         "batch_number",
         "version",
+        "dtype",
+        "index",
         "embedded_records",
         "hash",
         "record_tag",
@@ -191,6 +201,14 @@ def test_corruption_fails_without_partial_result_or_mutation(ingestion, batch, d
     first = rows.first()
     if damage == "missing_record":
         first.delete()
+    elif damage == "extra_record":
+        staged.records.create(
+            row_position=3, record_payload={**first.record_payload, "row_position": 3}
+        )
+    elif damage == "reordered_records":
+        second = rows.get(row_position=1)
+        rows.filter(pk=first.pk).update(record_payload=second.record_payload)
+        rows.filter(pk=second.pk).update(record_payload=first.record_payload)
     elif damage == "position":
         rows.filter(pk=first.pk).update(row_position=10)
     elif damage == "row_count":
@@ -204,6 +222,8 @@ def test_corruption_fails_without_partial_result_or_mutation(ingestion, batch, d
         "extracted_at",
         "batch_number",
         "version",
+        "dtype",
+        "index",
         "embedded_records",
     }:
         header = deepcopy(staged.header)
@@ -213,6 +233,8 @@ def test_corruption_fails_without_partial_result_or_mutation(ingestion, batch, d
             "extracted_at": ("extracted_at", {"type": "synthetic-private-value"}),
             "batch_number": ("batch_number", 9),
             "version": ("version", 2),
+            "dtype": ("dtypes", [{"kind": "unsupported"}] * len(batch.data.columns)),
+            "index": ("index", {"kind": "unsupported"}),
             "embedded_records": ("records", []),
         }[damage]
         header[key] = value
@@ -274,6 +296,71 @@ def test_valid_extraction_timestamp_is_provenance_not_hashed_content(ingestion, 
     assert result.extracted_at == changed.extracted_at
     assert fingerprint_source_batch(result) == staged.content_hash
     assert_frame_equal(result.data, batch.data, check_exact=True)
+
+
+@pytest.mark.parametrize("damage", ["scalar", "extracted_at"])
+def test_reader_rejects_malformed_content_with_matching_digest(ingestion, batch, damage):
+    staged = stage_source_batch(ingestion_id=ingestion.pk, batch=batch)
+    _corrupt_with_matching_digest(staged, damage)
+    before = _raw_snapshot(staged)
+    with CaptureQueriesContext(connections["default"]) as queries:
+        with pytest.raises(StagingIntegrityError, match="stored staging representation"):
+            _read(ingestion)
+    _assert_read_only(queries)
+    assert _raw_snapshot(staged) == before
+
+
+@pytest.fixture(scope="module")
+def gate2_services():
+    """Use the owner's independently pinned Gate 2 sources for interoperability checks."""
+    root = os.environ.get("DATAXAI_GATE2_BASELINE")
+    if root is None:
+        pytest.skip("Set DATAXAI_GATE2_BASELINE to the preserved Gate 2 checkout")
+    pins = {
+        "serialization": "c19ca6e238b8f52ce087140ab86c6182d997d7d2267917ba27c410095bb01179",
+        "staging": "96378ad8938141c9b47e4aa045dd04123976c470cb72ccc88f8efb0a07d414d3",
+        "staging_reader": "dfe079d621214faa33c9894e0501fdd52314fb1d5598223a375a8e96e92e4b43",
+    }
+    sources = {}
+    for name, pin in pins.items():
+        path = Path(root) / "apps" / "etl" / f"{name}.py"
+        source = path.read_bytes().replace(b"\r\n", b"\n")
+        assert hashlib.sha256(source).hexdigest() == pin, f"Unexpected Gate 2 {name} baseline"
+        sources[name] = compile(source, str(path), "exec")
+
+    modules = {}
+    with pytest.MonkeyPatch.context() as patch:
+        for name, code in sources.items():
+            module = ModuleType(f"gate2_{name}")
+            exec(code, module.__dict__)
+            modules[name] = module
+            if name == "serialization":
+                patch.setitem(sys.modules, "etl.serialization", module)
+    return modules
+
+
+@pytest.mark.parametrize(
+    "historical_writer", [True, False], ids=["gate2-to-gate3", "gate3-to-gate2"]
+)
+def test_cross_version_read_and_replay(gate2_services, historical_writer, ingestion, batch):
+    old_stage = gate2_services["staging"].stage_source_batch
+    old_read = gate2_services["staging_reader"].load_source_batch
+    old_codec = gate2_services["serialization"]
+    if historical_writer:
+        write, read, replay = old_stage, staging_reader.load_source_batch, stage_source_batch
+    else:
+        write, read, replay = stage_source_batch, old_read, old_stage
+    staged = write(ingestion_id=ingestion.pk, batch=batch)
+    before = _raw_snapshot(staged)
+    with CaptureQueriesContext(connections["default"]) as queries:
+        decoded = read(ingestion_id=ingestion.pk, batch_number=batch.batch_number)
+    _assert_read_only(queries)
+    expected = old_codec.encode_source_batch(batch)
+    assert encode_source_batch(decoded) == expected == encode_source_batch(batch)
+    assert staged.content_hash == old_codec.fingerprint_source_batch(batch)
+    later = replace(batch, extracted_at=batch.extracted_at + timedelta(days=1))
+    assert replay(ingestion_id=ingestion.pk, batch=later).pk == staged.pk
+    assert _raw_snapshot(staged) == before
 
 
 @pytest.mark.parametrize("error", [OperationalError, RuntimeError])

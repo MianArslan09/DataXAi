@@ -7,11 +7,14 @@ use the existing 18-row UCI fixture. No source data or schema is written.
 import copy
 import hashlib
 import json
+import os
 import struct
+import sys
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal
 from pathlib import Path
+from types import ModuleType
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -19,13 +22,76 @@ import pandas as pd
 import pytest
 import pytz
 
+from etl import serialization
 from etl.exceptions import SerializationError
 from etl.serialization import decode_source_batch, encode_source_batch, fingerprint_source_batch
 from etl.sources import CANONICAL_COLUMNS, CsvSource, ExcelSource, PostgresSource, SourceBatch
+from etl.tests import test_staging_persistence as persistence_tests
+from etl.tests import test_staging_reader as reader_tests
 from etl.tests.test_sources_postgres import SOURCE_DB_URL, requires_postgres
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EXTRACTED = datetime(2026, 10, 23, 10, 11, 12, 123456, tzinfo=timezone.utc)
+
+
+def _frozen_module(gate, name, pin):
+    """Load only independently pinned source, never a mutable reference copy."""
+    variable = f"DATAXAI_GATE{gate}_BASELINE"
+    root = os.environ.get(variable)
+    if root is None:
+        pytest.skip(f"Set {variable} to the preserved Gate {gate} checkout")
+    path = Path(root) / "apps" / "etl" / f"{name}.py"
+    code = path.read_bytes().replace(b"\r\n", b"\n")
+    assert hashlib.sha256(code).hexdigest() == pin
+    module = ModuleType(f"gate{gate}_{name}")
+    exec(compile(code, str(path), "exec"), module.__dict__)
+    return module
+
+
+@pytest.fixture(scope="module")
+def gate3_codec():
+    return _frozen_module(
+        3, "serialization", "a00cb039644dc4720548a7c7ea31e2aedc0ae216bbcc91b8be224132530e389c"
+    )
+
+
+@pytest.fixture(scope="module")
+def gate4_codec():
+    return _frozen_module(
+        4, "serialization", "fbf5617e3b07e2b2826550af08a8758e1ed5f7e43c9981acb9309dd2648a3c0d"
+    )
+
+
+@pytest.fixture(scope="module", params=["gate3_codec", "gate4_codec"])
+def reference_codec(request):
+    return request.getfixturevalue(request.param)
+
+
+class TestGate3PersistedCompatibility:
+    # Limit the existing disposable application database fixture to this class.
+    application_postgres = staticmethod(persistence_tests.application_postgres)
+    staging_postgres = staticmethod(persistence_tests.staging_postgres)
+    ingestion = staticmethod(persistence_tests.ingestion)
+    batch = staticmethod(persistence_tests.batch)
+
+    @pytest.mark.parametrize("gate3_writer", [True, False], ids=["old-write", "new-write"])
+    def test_read_and_replay(self, gate3_codec, gate3_writer, ingestion, batch):
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setitem(sys.modules, "etl.serialization", gate3_codec)
+            services = {
+                "serialization": gate3_codec,
+                "staging": _frozen_module(
+                    3,
+                    "staging",
+                    "3d9a235e9bacc2a4bd76391c4a450d237fd28ec57772c796406123f56c68e3a5",
+                ),
+                "staging_reader": _frozen_module(
+                    3,
+                    "staging_reader",
+                    "e1d9407751a08e64c052f7cc7d79486e9da6a4497a4c82d39b3c6b91da272e44",
+                ),
+            }
+        reader_tests.test_cross_version_read_and_replay(services, gate3_writer, ingestion, batch)
 
 
 def _objects(values):
@@ -49,7 +115,8 @@ def _roundtrip(batch):
     before = batch.data.copy(deep=True)
     payload = encode_source_batch(batch)
     wire = json.dumps(payload, ensure_ascii=False, allow_nan=False)
-    restored = decode_source_batch(json.loads(wire))
+    restored, digest = serialization._decode_and_fingerprint(json.loads(wire))
+    assert digest == fingerprint_source_batch(batch)
     pd.testing.assert_frame_equal(
         restored.data, before, check_exact=True, check_index_type=True, check_column_type=True
     )
@@ -61,6 +128,236 @@ def _roundtrip(batch):
     assert type(restored.extracted_at) is type(batch.extracted_at)
     assert encode_source_batch(restored) == payload
     return restored
+
+
+class _TextSubclass(str):
+    pass
+
+
+class _AliasKey(str):
+    """Looks up as 'value' in a Python dict but renders its actual text in JSON."""
+
+    def __hash__(self):
+        return hash("value")
+
+    def __eq__(self, other):
+        return str(other) == "value"
+
+
+def test_positive_match_is_restricted_on_both_sides():
+    class DictSubclass(dict):
+        def items(self):
+            pytest.fail("A dict subclass was inspected")
+
+    match = serialization._same_flat_string_token
+    plain = {"type": "str", "value": "اردو\x00"}
+    assert match(plain, dict(reversed(plain.items())))
+    assert not match(plain, {**plain, "value": "different"})
+    for left, right in (
+        (DictSubclass(plain), plain),
+        ({_TextSubclass("type"): "str"}, {"type": "str"}),
+        ({"value": _TextSubclass("x")}, {"value": "x"}),
+        ({_AliasKey("disguised"): "x"}, {"value": "x"}),
+        ({"value": False}, {"value": 0}),
+        ({"value": 1.0}, {"value": 1}),
+        ({"value": ["x"]}, {"value": ["x"]}),
+    ):
+        assert not match(left, right)
+        assert not match(right, left)
+
+
+def test_scalar_fallback_preserves_json_operands_and_error_path(monkeypatch):
+    token = {"type": "numpy", "dtype": "bool", "bits": "02"}
+    render = serialization._json
+    seen = []
+
+    def observe(value):
+        seen.append(value)
+        return render(value)
+
+    monkeypatch.setattr(serialization, "_json", observe)
+    with pytest.raises(SerializationError) as caught:
+        serialization._read_scalar(token, "row[2].column[4]")
+    assert str(caught.value) == (
+        "SER-v1 row[2].column[4]: noncanonical or unreconstructable scalar representation"
+    )
+    assert seen == [{"type": "numpy", "dtype": "bool", "bits": "01"}, token]
+    assert seen[1] is token
+
+
+@pytest.mark.parametrize(
+    ("token", "valid"),
+    [
+        ({"value": "e\u0301\x00", "type": "str"}, True),
+        ({"type": "str", _TextSubclass("value"): "x"}, True),
+        ({"type": "str", _AliasKey("disguised"): "x"}, False),
+        ({"type": "str", "value": _TextSubclass("x")}, False),
+        ({"type": "str", "value": "\ud800"}, False),
+        ({"type": "str", "value": "x", "extra": ""}, False),
+        ({"type": "str"}, False),
+        ({"type": "unknown"}, False),
+        ({"value": "01", "type": "int"}, False),
+        ({"type": "numpy", "dtype": "bool", "bits": "02"}, False),
+        ({"type": "bool", "value": 1}, False),
+        ({"type": "decimal", "sign": False, "digits": [0], "exponent": 0}, False),
+        ({"type": "decimal", "sign": 0.0, "digits": [0], "exponent": 0}, False),
+        ({"type": "decimal", "sign": 0, "digits": [0, 1], "exponent": 0}, False),
+    ],
+    ids=[
+        "reordered",
+        "subclass-key",
+        "alias-key",
+        "subclass-value",
+        "surrogate",
+        "extra-key",
+        "missing-key",
+        "unknown-tag",
+        "integer-text",
+        "numpy-bits",
+        "bool-int",
+        "decimal-bool",
+        "decimal-float",
+        "decimal-digits",
+    ],
+)
+def test_frozen_token_acceptance_and_error_contract(reference_codec, token, valid):
+    payload = reference_codec.encode_source_batch(_batch())
+    payload["records"][0]["values"][-1] = token
+    before = json.dumps(payload, sort_keys=True)
+    if valid:
+        old = reference_codec.decode_source_batch(payload)
+        new = decode_source_batch(payload)
+        assert serialization._json(encode_source_batch(new)) == reference_codec._json(
+            reference_codec.encode_source_batch(old)
+        )
+        assert fingerprint_source_batch(new) == reference_codec.fingerprint_source_batch(old)
+    else:
+        with pytest.raises(SerializationError) as old_error:
+            reference_codec.decode_source_batch(payload)
+        with pytest.raises(SerializationError) as new_error:
+            decode_source_batch(payload)
+        assert type(new_error.value) is type(old_error.value)
+        assert str(new_error.value) == str(old_error.value)
+        assert "row[0].column[8]" in str(new_error.value)
+    assert json.dumps(payload, sort_keys=True) == before
+
+
+def test_frozen_and_candidate_read_each_others_exact_representations(reference_codec):
+    values = [
+        0.0,
+        -0.0,
+        struct.unpack(">d", bytes.fromhex("fff8000000000001"))[0],
+        np.array([0x7FC00003], dtype=np.uint32).view(np.float32)[0],
+        np.float16(-0.0),
+        Decimal("-0.0100"),
+        Decimal("-0.00"),
+        Decimal("-sNaN123"),
+        Decimal("Infinity"),
+        pd.Timestamp("2026-11-08 14:30:00.123456789", tz="Asia/Karachi"),
+        datetime(2025, 11, 2, 1, 30, tzinfo=ZoneInfo("America/New_York"), fold=1),
+        np.datetime64("2026-11-08T14:30:00.123", "ms"),
+        "اردو\x00",
+        None,
+        pd.NA,
+        pd.NaT,
+    ]
+    raw = _batch(values, index=pd.Index(["duplicate\x00"] * len(values), name="index"))
+    raw.data.insert(
+        len(raw.data.columns),
+        "extra",
+        pd.array([1, None] * 8, dtype="Int64"),
+        allow_duplicates=True,
+    )
+    raw.data["flag"] = pd.array([True, None] * 8, dtype="boolean")
+    raw.data["text"] = pd.array(["", None] * 8, dtype="string[python]")
+    raw.data["price"] = pd.array([-0.0, None] * 8, dtype="Float64")
+    old_wire = reference_codec.encode_source_batch(raw)
+    before = reference_codec._json(old_wire).encode("utf-8")
+    expected_hash = reference_codec.fingerprint_source_batch(raw)
+    new_wire = encode_source_batch(raw)
+    for codec, wire in ((serialization, old_wire), (reference_codec, new_wire)):
+        restored = codec.decode_source_batch(wire)
+        assert codec._json(codec.encode_source_batch(restored)).encode("utf-8") == before
+        assert codec.fingerprint_source_batch(restored) == expected_hash
+    assert serialization._json(new_wire).encode("utf-8") == before
+    assert reference_codec._json(old_wire).encode("utf-8") == before
+    assert reference_codec._json(reference_codec.encode_source_batch(raw)).encode() == before
+
+
+@pytest.mark.parametrize("key_type", [str, _TextSubclass])
+def test_post_dtype_regenerates_once_and_requires_exact_key_types(
+    gate4_codec, monkeypatch, key_type
+):
+    payload = gate4_codec.encode_source_batch(_batch())
+    supplied = {key_type("value"): "sample", "type": "str"}
+    payload["records"][0]["values"][-1] = supplied
+    old = gate4_codec.decode_source_batch(payload)
+    scalar, render = serialization._scalar, serialization._json
+    site = serialization._decode.__code__
+    regenerated = []
+    rendered = []
+
+    def observe_scalar(value, path):
+        if sys._getframe(1).f_code is site and path == "row[0].column[8]":
+            regenerated.append(value)
+        return scalar(value, path)
+
+    def observe_json(value):
+        if sys._getframe(1).f_code is site and value is supplied:
+            rendered.append(value)
+        return render(value)
+
+    monkeypatch.setattr(serialization, "_scalar", observe_scalar)
+    monkeypatch.setattr(serialization, "_json", observe_json)
+    new = decode_source_batch(payload)
+    assert regenerated == ["sample"]
+    assert len(rendered) == (0 if key_type is str else 1)
+    assert render(encode_source_batch(new)) == render(gate4_codec.encode_source_batch(old))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [np.int32(1), True, 1.0, -0.0, Decimal("1.00")],
+    ids=["numpy-width", "bool", "float", "signed-zero", "decimal-scale"],
+)
+def test_post_dtype_mismatch_matches_gate4_and_compares_in_order(gate4_codec, monkeypatch, value):
+    # Both tokens are valid before construction. Only row 1 changes in the int64 column.
+    payload = gate4_codec.encode_source_batch(_batch([np.int64(1), value]))
+    payload["dtypes"][-1] = {"kind": "numpy", "name": "int64"}
+    supplied = payload["records"][1]["values"][-1]
+    before = gate4_codec._json(payload)
+    with pytest.raises(SerializationError) as old:
+        gate4_codec.decode_source_batch(payload)
+
+    seen = []
+    render = serialization._json
+
+    def observe(token):
+        seen.append(token)
+        return render(token)
+
+    monkeypatch.setattr(serialization, "_json", observe)
+    with pytest.raises(SerializationError) as new:
+        decode_source_batch(payload)
+    path = "row[1].column[8]"
+    assert type(new.value) is type(old.value)
+    expected_error = f"SER-v1 {path}: values incompatible with declared dtype"
+    assert str(new.value) == str(old.value) == expected_error
+    assert seen[-2] == gate4_codec._scalar(np.int64(value), path)
+    assert seen[-1] is supplied
+    assert render(payload) == before
+
+
+def test_pre_comparison_array_construction_failure_matches_gate4(gate4_codec):
+    payload = gate4_codec.encode_source_batch(_batch([np.int64(1), "1"]))
+    payload["dtypes"][-1] = {"kind": "numpy", "name": "int64"}
+    before = gate4_codec._json(payload)
+    for codec in (gate4_codec, serialization):
+        with pytest.raises(SerializationError) as caught:
+            codec.decode_source_batch(payload)
+        assert type(caught.value) is SerializationError
+        assert str(caught.value) == "SER-v1 payload: malformed or incompatible representation"
+        assert codec._json(payload) == before
 
 
 @pytest.mark.parametrize(
@@ -403,6 +700,10 @@ def test_ser_v1_wire_shape_and_golden_fingerprint():
         fingerprint_source_batch(_batch())
         == "34945b7ea9a48eae6d466d54af358b02611b4aac8807054d5ad375af2f71339d"
     )
+    snapshot, digest = serialization._encode_and_fingerprint(_batch())
+    assert snapshot == payload
+    assert digest == "34945b7ea9a48eae6d466d54af358b02611b4aac8807054d5ad375af2f71339d"
+    assert serialization._decode_and_fingerprint(payload)[1] == digest
 
 
 @pytest.mark.parametrize("value", [None, [], "json text", 1, True])
@@ -411,17 +712,33 @@ def test_public_entry_points_reject_incompatible_contracts(value):
         encode_source_batch(value)
     with pytest.raises(SerializationError):
         decode_source_batch(value)
+    with pytest.raises(SerializationError):
+        fingerprint_source_batch(value)
 
 
-def test_fingerprint_canonical_bytes_determinism_and_provenance_exclusion():
+def test_fingerprint_canonical_bytes_determinism_and_provenance_exclusion(monkeypatch):
     batch = _batch(["اردو", Decimal("-0.00")])
     payload = encode_source_batch(batch)
-    payload.pop("extracted_at")
-    payload.pop("batch_number")
+    content = payload.copy()
+    del content["extracted_at"], content["batch_number"]
     canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        content, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
     expected = hashlib.sha256(canonical).hexdigest()
+    sha256 = hashlib.sha256
+    hashed = []
+
+    def observe(data):
+        hashed.append(data)
+        return sha256(data)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(serialization.hashlib, "sha256", observe)
+        snapshot, digest = serialization._encode_and_fingerprint(batch)
+        restored, read_digest = serialization._decode_and_fingerprint(payload)
+    assert hashed == [canonical, canonical]
+    assert read_digest == expected and encode_source_batch(restored) == snapshot
+    assert snapshot == payload and digest == expected
     assert fingerprint_source_batch(batch) == expected
     assert fingerprint_source_batch(decode_source_batch(encode_source_batch(batch))) == expected
     assert (
@@ -431,6 +748,75 @@ def test_fingerprint_canonical_bytes_determinism_and_provenance_exclusion():
         == expected
     )
     assert len(expected) == 64
+
+
+@pytest.mark.parametrize("damage", [None, "noncanonical_int", "extracted_at"])
+def test_persisted_payload_is_decoded_once_before_hashing(monkeypatch, damage):
+    payload = encode_source_batch(_batch())
+    if damage == "noncanonical_int":
+        payload["records"][0]["values"][0] = {"type": "int", "value": "01"}
+    elif damage == "extracted_at":
+        payload["extracted_at"] = {"type": "none"}
+    before = copy.deepcopy(payload)
+    calls = []
+    decode = serialization.decode_source_batch
+    fingerprint = serialization._fingerprint_validated_payload
+
+    def observed_decode(value):
+        assert value is payload
+        calls.append("decode")
+        return decode(value)
+
+    def observed_hash(value):
+        assert value is payload
+        calls.append("hash")
+        return fingerprint(value)
+
+    monkeypatch.setattr(serialization, "decode_source_batch", observed_decode)
+    monkeypatch.setattr(serialization, "_fingerprint_validated_payload", observed_hash)
+    if damage is None:
+        restored, _ = serialization._decode_and_fingerprint(payload)
+        restored.data.iloc[0, 0] = "caller edit"
+        assert calls == ["decode", "hash"]
+    else:
+        with pytest.raises(SerializationError):
+            serialization._decode_and_fingerprint(payload)
+        assert calls == ["decode"]
+    assert payload == before
+
+
+def test_snapshot_is_captured_once_and_is_independent_of_later_edits(monkeypatch):
+    batch = _batch([Decimal("1.00")], index=pd.Index(["original"]))
+    expected = encode_source_batch(batch)
+    original_digest = fingerprint_source_batch(batch)
+    captures = []
+
+    def capture_then_edit(source):
+        payload = encode_source_batch(source)
+        captures.append(payload)
+        source.data.iat[0, -1] = Decimal("1.0")
+        source.data.index = pd.Index(["edited"])
+        return payload
+
+    with monkeypatch.context() as patch:
+        patch.setattr(serialization, "encode_source_batch", capture_then_edit)
+        snapshot, digest = serialization._encode_and_fingerprint(batch)
+    assert captures == [expected] and snapshot == expected
+    assert digest == original_digest
+    assert fingerprint_source_batch(batch) != digest
+
+
+def test_paired_operation_rejects_an_unreconstructable_encoding(monkeypatch):
+    core_encode = serialization._encode
+
+    def invalid_position(source):
+        payload = core_encode(source)
+        payload["records"][0]["row_position"] = True
+        return payload
+
+    monkeypatch.setattr(serialization, "_encode", invalid_position)
+    with pytest.raises(SerializationError, match="row.*expected an integer"):
+        serialization._encode_and_fingerprint(_batch())
 
 
 @pytest.mark.parametrize(

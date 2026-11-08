@@ -25,7 +25,7 @@ from etl.exceptions import (
     StagingIntegrityError,
 )
 from etl.models import StagingBatch, StagingIngestion, StagingRecord
-from etl.serialization import decode_source_batch, encode_source_batch, fingerprint_source_batch
+from etl.serialization import _decode_and_fingerprint, _encode_and_fingerprint
 from etl.sources.contract import SourceBatch
 
 _INSERT_BATCH_SIZE = 1000
@@ -79,9 +79,9 @@ def _verify_existing(staged):
         records.append(record)
     payload = {**header, "records": records}
     _check_rows(payload)
-    reconstructed = decode_source_batch(payload)
+    _, digest = _decode_and_fingerprint(payload)
     _require(
-        fingerprint_source_batch(reconstructed) == staged.content_hash,
+        digest == staged.content_hash,
         "The reconstructed staging fingerprint disagrees with its stored hash.",
     )
 
@@ -111,10 +111,8 @@ def stage_source_batch(*, ingestion_id: UUID, batch: SourceBatch) -> StagingBatc
         "Raw staging requires the application PostgreSQL database.",
     )
 
-    payload = encode_source_batch(batch)
+    payload, content_hash = _encode_and_fingerprint(batch)
     _check_rows(payload)
-    # Hash the encoded snapshot, not a second read of the caller's mutable frame.
-    content_hash = fingerprint_source_batch(decode_source_batch(payload))
     batch_number = payload["batch_number"]
     header = {key: value for key, value in payload.items() if key != "records"}
 

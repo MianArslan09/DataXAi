@@ -84,3 +84,9 @@ Git integration of 4.4.6 remains pending on `feat/etl-4.4.6-recovery-fencing`; a
 **Volume 4.4.7 is FORMALLY OWNER ACCEPTED — 2026-11-05; technical verification PASSED.** This supersedes historical future-gate guidance, consistently with `AGENTS.md`. Volume 4.4.6 is merged through PR #8 (`358677f`); 4.4.7 Git integration remains pending / NOT YET CONFIRMED. Use the dated `docs/PROJECT_STATE.md` checkpoint for owner-executed evidence and performance limitations; documentation maintenance did not rerun tests or benchmarks.
 
 Next activity is controlled documentation and separately owner-directed Git/PR integration. Performance investigation is PROPOSED; do not implement optimization or advance milestones without authorization. Preserve accepted serialization, staging, lineage, recovery, idempotency and fencing. SAFE date interpretation is not full validation or warehouse readiness; full ETL remains incomplete. Preserve local evidence without including reports, logs, datasets or archives in source-control changes. Retain all existing Git and scope-control rules.
+
+## 2026-11-08 — Current performance-phase gate
+
+The owner accepted performance Gates 1–5, including Gate 5 on November 8. Volume 4.4.7 is integrated through PR #9 at `44c3d60`. The performance series is locally implemented and verified; its Git integration is pending. Preserve the historical checkpoints and use the [November 8 project-state record](../docs/PROJECT_STATE.md) for current evidence.
+
+The owner accepted the Gate 5 fresh-run historical qualification. The 5k replay saving of **2.374 s** missed the proposed **3.166 s** threshold; separate owner acknowledgment remains **PENDING**. Current work is limited to owner documentation review and separately authorized Git integration planning. Keep independent SER-v1, staging, lineage and fencing checks intact. Gate 6 and Volume 4.5 are closed; Volume 4.4 remains incomplete.
