@@ -172,3 +172,30 @@ Volume 4.4.5 is formally accepted and merged through PR #7 (`cb20b6a`). This lat
 Volume 4.4.7 is owner accepted and integrated through PR #9 (`44c3d60`). Gates 1–5 are implemented, locally verified and owner accepted. Their work covers bounded profiling, writer snapshot reuse, validated persisted-payload hashing, and exact flat-string comparisons before and after dtype construction. Performance-series Git integration is **PENDING**.
 
 Gate 5 acceptance on November 8 includes the historical fresh-run qualification. The proposed 5k replay criterion was **NOT MET** (2.374 s saved against 3.166 s); separate owner acknowledgment is pending. See the [November 8 project-state checkpoint](PROJECT_STATE.md#2026-11-08--performance-optimization-gates-15-closed-and-owner-accepted). Next comes owner documentation review and separately authorized Git integration planning. Volume 4.4 remains incomplete; no Gate 6 or Volume 4.5 work is authorized.
+
+## 2026-11-10 — Volume 4.5.2: Formal Acceptance
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.2 ROADMAP -->
+
+Volume 4.5.2 — Single-Batch PipelineRun Integration is **FORMALLY OWNER ACCEPTED**.
+
+The accepted scope integrates synchronous single-batch coordination, a protected optional PipelineRun-to-TransformationAttempt association, transactional terminal projection, established claim-generation fencing, controlled failure handling, verified replay and PostgreSQL regression coverage.
+
+Owner-reported verification:
+
+- 1,137 full-regression passes with 42 conditional skips, exit 0.
+- 42 separately passing Gate 2–4 historical compatibility checks.
+- 3 final hardening passes.
+- Passing Django system and migration-drift checks.
+- Passing Ruff, targeted Black, isort and Git whitespace checks.
+- Passing independent architecture and code review.
+
+Implementation branch: `feat/etl-4.5.2-pipeline-run`.
+
+Integration baseline: PR #10 merge `d7ae559`.
+
+Git integration remains pending at this checkpoint. The seven historical evidence artifacts are excluded.
+
+This checkpoint supersedes earlier roadmap statements that Volume 4.5 implementation was unauthorized, without rewriting those historical records.
+
+Volume 4.5.3a and 4.5.3b remain separately gated. No next-phase implementation is authorized through the 4.5.2 integration workflow.

@@ -522,8 +522,11 @@ def test_migration_reverses_and_reapplies_only_in_disposable_database(staging_po
             TransformationRecordResult,
         )
     )
-    assert PipelineRun.objects.using(alias).get(pk=run.pk).notes == "disposable database sentinel"
+    runs = PipelineRun.objects.using(alias).filter(pk=run.pk)
+    assert runs.values_list("notes", flat=True).get() == "disposable database sentinel"
     MigrationExecutor(connection).migrate([("etl", "0002_staging_schema")])
     assert "etl_transformationrecordresult" in connection.introspection.table_names()
     test_composite_constraints_exist_with_exact_columns_and_immediate_checks(alias)
-    assert PipelineRun.objects.using(alias).get(pk=run.pk).status == PipelineRun.Status.PENDING
+    assert runs.values_list("status", flat=True).get() == PipelineRun.Status.PENDING
+    executor = MigrationExecutor(connection)
+    executor.migrate(executor.loader.graph.leaf_nodes())

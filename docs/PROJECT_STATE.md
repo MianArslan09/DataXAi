@@ -1508,3 +1508,87 @@ SER-v1 preserves supported scalar, dtype, axis and row representations. Its cont
 At reconciliation, Gates 1–5 remain **Git integration PENDING** on `codex/etl-bounded-profiling` at `44c3d60`, with unstaged implementation changes and local evidence. No performance-series PR, CI result, merge or deployment is asserted. The ignored repository workbook `DataXAi Volume Tracker.xlsx` matches the owner’s dated reconciled copy byte for byte. Continue using the existing repository workbook as the tracking reference.
 
 **Next action:** owner documentation review and separate acknowledgment of the replay-threshold deviation. Git/PR integration planning requires separate owner direction. Gate 6, Volume 4.5 and further optimization or benchmarking remain unauthorized.
+
+## 2026-11-10 — Volume 4.5.2: Single-Batch PipelineRun Integration — Formal Owner Acceptance
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.2 OWNER ACCEPTED -->
+
+**Status:** IMPLEMENTED — TESTED — LOCALLY VERIFIED — POSTGRESQL VERIFIED — INDEPENDENTLY REVIEWED — FORMALLY OWNER ACCEPTED.
+
+**Checkpoint date:** 2026-11-10. Formal acceptance was reported by the project owner; the original decision timestamp is not independently established by this checkpoint.
+
+### Accepted implementation
+
+Volume 4.5.2 integrates synchronous single-batch PipelineRun execution with existing staging, transformation attempts, result-ledger persistence and PostgreSQL claim-generation fencing.
+
+The implementation introduces:
+
+- `stage_and_run_batch()` for staging and executing a supplied batch.
+- `run_staged_batch()` for executing or reconciling an existing staged batch.
+- A nullable, protected one-to-one PipelineRun-to-TransformationAttempt relationship.
+- Transactionally coordinated attempt completion and terminal PipelineRun projection.
+- Controlled type-conversion failure handling and verified terminal replay.
+- Integrity checks for staged row counts, positions, attempt state, ownership and managed-run accounting.
+- Django Admin protection for attempt-managed runs.
+- PostgreSQL regression coverage and migration-reversal verification.
+
+`TransformationAttempt` remains the authoritative lifecycle and result-ledger record. `PipelineRun` provides the linked status and accounting projection.
+
+### Owner-reported verification evidence
+
+| Verification | Recorded result |
+|---|---|
+| Final full regression | 1,137 passed, 42 conditional skips, exit 0 |
+| Historical Gate 2–4 compatibility | 42 passed in separate execution |
+| Final hardening | 3 passed |
+| Django system check | Passed |
+| Migration drift | Passed |
+| Ruff | Passed |
+| Targeted Black | Passed |
+| isort | Passed |
+| Git whitespace checks | Passed |
+| Independent architecture and code review | Passed; no reported acceptance blockers |
+
+The 42 conditional skips in the full regression were not executed in that run. Their separate successful compatibility execution is recorded independently.
+
+These are owner-reported local verification results, not GitHub Actions CI evidence.
+
+### Integrity and architecture boundaries
+
+Existing SER-v1 serialization, source metadata, positional lineage, independently persisted staging reconstruction, attempt identity, immutable source records, transactional result-ledger guarantees, idempotent replay, recovery and claim-generation fencing remain protected by the accepted implementation.
+
+Historical PipelineRun records remain compatible because the new attempt relationship is nullable.
+
+Migration reversal drops the association without deleting runs or attempts. Reapplying the migration does not automatically reconstruct those associations.
+
+Successful date interpretation must not be confused with business validation, automated repair, quarantine or warehouse publication.
+
+PipelineRun healing and quarantine counters remain zero within this milestone.
+
+The synchronous coordinator may exceed its claim lease. Recovery is explicit; uncontrolled execution failures are not automatically converted into terminal failed records.
+
+Volume 4.5.2 does not implement multi-batch iteration, source-completeness authority, ingestion-wide finalization, Celery orchestration, API execution, anomaly detection, automated healing, quarantine or warehouse publication.
+
+### Git integration
+
+Implementation branch: `feat/etl-4.5.2-pipeline-run`.
+
+Baseline: PR #10 merge commit `d7ae559ea51681ab6f36cec3053ad20ee78b1896`.
+
+Implementation scope: six reviewed Python files, including one migration and regression tests.
+
+Git integration is pending at this acceptance checkpoint. No Volume 4.5.2 PR, GitHub Actions result or merge is asserted here.
+
+Seven historical untracked evidence files remain excluded from version control.
+
+### Milestone boundary
+
+Volume 4.5.2 is formally owner-accepted.
+
+Git integration and CI verification remain separate checkpoints.
+
+This checkpoint supersedes earlier milestone-status statements while preserving their historical records.
+
+Volume 4.5.3a and 4.5.3b require separate approved planning and milestone gates. No implementation of either phase is authorized by this integration record.
+
+The full ETL pipeline and downstream DataXAi platform remain incomplete.
