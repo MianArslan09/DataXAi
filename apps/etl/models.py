@@ -37,6 +37,13 @@ class PipelineRun(TimeStampedModel):
         SUCCEEDED = "succeeded", "Succeeded"
         FAILED = "failed", "Failed"
 
+    attempt = models.OneToOneField(
+        "TransformationAttempt",
+        on_delete=models.PROTECT,
+        related_name="pipeline_run",
+        null=True,
+        blank=True,
+    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
