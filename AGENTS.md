@@ -133,3 +133,39 @@ Volume 4.4.7 Git integration remains pending / NOT YET CONFIRMED on `feat/etl-4.
 The owner accepted performance Gates 1–5, including Gate 5 on November 8. Volume 4.4.7 is integrated through PR #9 at `44c3d60`. The performance series is locally implemented and verified; its Git integration is pending. Preserve the historical checkpoints and use the [November 8 project-state record](docs/PROJECT_STATE.md) for current evidence.
 
 The owner accepted the Gate 5 fresh-run historical qualification. The 5k replay saving of **2.374 s** missed the proposed **3.166 s** threshold; separate owner acknowledgment remains **PENDING**. Current work is limited to owner documentation review and separately authorized Git integration planning. Keep independent SER-v1, staging, lineage and fencing checks intact. Gate 6 and Volume 4.5 are closed; Volume 4.4 remains incomplete.
+
+## 2026-11-10 — Current Gate: Volume 4.5.2 Formally Accepted
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.2 AGENT GATE -->
+
+Volume 4.5.2 — Single-Batch PipelineRun Integration is IMPLEMENTED, OWNER-VERIFIED, INDEPENDENTLY REVIEWED and FORMALLY OWNER ACCEPTED.
+
+The accepted implementation provides synchronous PostgreSQL single-batch coordination using existing staging, transformation-attempt lifecycle, claim-generation fencing and verified outcome-ledger contracts.
+
+A nullable protected PipelineRun-to-TransformationAttempt relationship and migration preserve compatibility with historical runs.
+
+Owner-reported evidence includes:
+
+- 1,137 passing full-regression tests with 42 conditional skips.
+- 42 separately passing historical compatibility checks.
+- 3 final hardening passes.
+- Successful Django system and migration-drift checks.
+- Passing code-quality verification and independent review.
+
+The accepted implementation must not be expanded during Git integration.
+
+Preserve original staging records, positional lineage, SER-v1, idempotent replay, recovery, fencing, transactional finalization and controlled error handling.
+
+Current integration branch: `feat/etl-4.5.2-pipeline-run`.
+
+Baseline: PR #10 merge commit `d7ae559`.
+
+Git integration and CI remain pending at this checkpoint.
+
+Historical ZIP archives, JSON reports, logs, patches and benchmark evidence must remain untracked.
+
+No source deletion, history rewriting, unrelated refactoring, benchmark reruns or Volume 4.5.3 implementation is authorized.
+
+This checkpoint supersedes older gate-status statements while preserving their historical context.
+
+Volume 4.5.3a and 4.5.3b remain independently gated.
