@@ -1592,3 +1592,70 @@ This checkpoint supersedes earlier milestone-status statements while preserving 
 Volume 4.5.3a and 4.5.3b require separate approved planning and milestone gates. No implementation of either phase is authorized by this integration record.
 
 The full ETL pipeline and downstream DataXAi platform remain incomplete.
+
+## 2026-11-10 — Volume 4.5.3a: Formal Owner Acceptance
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.3A OWNER ACCEPTED -->
+
+**Milestone:** Volume 4.5.3a — Sequential Multi-Batch Coordination and Staged-Range Continuation.
+
+**Status:** IMPLEMENTED, LOCALLY VERIFIED, INDEPENDENTLY REVIEWED, FORMALLY OWNER ACCEPTED.
+
+### Accepted implementation
+
+Implementation commit: `a9be83e06da798e8bd02db13d1d68f6082c44bf1`.
+
+The implementation introduces two Python files:
+
+- `apps/etl/ingestion_runs.py`
+- `apps/etl/tests/test_ingestion_runs.py`
+
+The coordinator exposes `run_ingestion()` for sequential live-source traversal and `resume_staged_range()` for execution of an explicit inclusive range of existing staged batches.
+
+An immutable `IngestionExecutionSummary` records execution identity, successful batches, successful rows, SAFE and UNRESOLVED row counts, controlled failed-run identity, and traversal exhaustion.
+
+Individual batches delegate to the accepted Volume 4.5.2 `stage_and_run_batch()` and `run_staged_batch()` services.
+
+The existing architecture remains responsible for SER-v1, staging integrity, source lineage, transformation attempts, transactional results, idempotent replay, and PostgreSQL claim-generation fencing.
+
+### Verification evidence and provenance
+
+| Verification | Result | Provenance |
+|---|---|---|
+| Full repository regression | 1,161 passed; 42 conditional skips; zero failures; exit 0; 175.30 seconds | Owner-reported local execution |
+| Focused coordinator tests | 24 passed | Codex-reported local execution |
+| Existing single-batch regression | 31 passed | Codex-reported local execution |
+| Ruff, Black, isort | Passed | Implementation verification report |
+| Git whitespace check | Passed | Implementation verification report |
+| Independent architectural review | No acceptance-blocking finding reported | Owner-reported review |
+
+These results were reported during milestone verification; they were not rerun by this documentation updater.
+
+The 42 conditional skips were not executed in the final 4.5.3a full suite. They concern historical compatibility baselines separately verified during Volume 4.5.2.
+
+### Accepted invariants and limitations
+
+- Live extraction requires a fresh OPEN ingestion, a matching unopened supported source, and one designated producer.
+- Batch identities and source identities must follow the established contracts.
+- Earlier successfully committed batches survive later failures or interruptions.
+- A returned FAILED run stops sequential processing.
+- Unexpected conflicts, integrity errors, and source failures propagate rather than being silently treated as success.
+- Staged-range replay operates only on previously staged batches and does not reopen or resume the upstream extraction source.
+- The source-exhausted indicator describes the current traversal; it does not prove complete upstream source scope.
+- Neither coordinator operation marks an ingestion COMPLETE or ABORTED or establishes authoritative final source counts.
+- SAFE and UNRESOLVED row counts describe the current interpretation contract, not automated validation, healing, or quarantine.
+- No new database migration, source-wide producer lock, warehouse publication, or asynchronous orchestration is introduced.
+
+### Git integration checkpoint
+
+Branch: `feat/etl-4.5.3a-multi-batch`.
+
+Baseline: Volume 4.5.2 merge `8277ac028caf0689243abbf5810590190106d05b`.
+
+Implementation commit: `a9be83e06da798e8bd02db13d1d68f6082c44bf1`.
+
+Implementation Git commit is complete. Documentation commit, PR, remote CI, and merge are pending at this checkpoint.
+
+Seven historical evidence artifacts remain excluded from version control.
+
+Volume 4.5.3b — Evidence-Gated Ingestion Completion — remains a separately authorized milestone. This acceptance does not authorize its implementation or Volume 4.6.

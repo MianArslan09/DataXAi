@@ -199,3 +199,35 @@ Git integration remains pending at this checkpoint. The seven historical evidenc
 This checkpoint supersedes earlier roadmap statements that Volume 4.5 implementation was unauthorized, without rewriting those historical records.
 
 Volume 4.5.3a and 4.5.3b remain separately gated. No next-phase implementation is authorized through the 4.5.2 integration workflow.
+
+## 2026-11-10 — Volume 4.5.3a Acceptance Checkpoint
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.3A ROADMAP -->
+
+**Volume 4.5.3a — Sequential Multi-Batch Coordination and Staged-Range Continuation: FORMALLY OWNER ACCEPTED.**
+
+Accepted implementation:
+
+- Sequential execution across multiple staged source batches.
+- Live CSV, Excel, and PostgreSQL source traversal through existing adapters.
+- Explicit inclusive staged-range execution and replay.
+- Immutable execution summaries with batch and row accounting.
+- Controlled stop-on-failure behavior.
+- Preservation of staging lineage, transformation-attempt identity, transactional result integrity, idempotent replay, and claim-generation fencing.
+- No new database migration.
+
+Verification evidence: owner-reported full regression of 1,161 passed, 42 conditional skips, zero failures, exit 0, and 175.30 seconds. Focused verification reported 24 coordinator tests passed and 31 existing single-batch tests passed.
+
+Implementation commit: `a9be83e`.
+
+Branch: `feat/etl-4.5.3a-multi-batch`.
+
+Base: Volume 4.5.2 merged `main` at `8277ac0`.
+
+Documentation Git commit, PR, GitHub CI, and merge remain pending at this dated checkpoint.
+
+**Next gate:** Volume 4.5.3b requires independent authorization and verification of immutable-input scope, durable completion evidence, and controlled ingestion finalization.
+
+Volume 4.5.3a does not prove whole-ingestion completeness, finalize ingestion status, perform automated healing, publish warehouse data, or authorize Volume 4.5.3b development.
+
+This checkpoint supersedes older planning-only status statements without deleting historical records.
