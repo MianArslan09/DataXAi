@@ -169,3 +169,34 @@ No source deletion, history rewriting, unrelated refactoring, benchmark reruns o
 This checkpoint supersedes older gate-status statements while preserving their historical context.
 
 Volume 4.5.3a and 4.5.3b remain independently gated.
+
+## 2026-11-10 — Current Accepted Gate: Volume 4.5.3a
+
+<!-- DATAXAI CHECKPOINT 2026-11-10 V4.5.3A AGENT GATE -->
+
+Volume 4.5.3a — Sequential Multi-Batch Coordination and Staged-Range Continuation is IMPLEMENTED, OWNER-VERIFIED, INDEPENDENTLY REVIEWED, and FORMALLY OWNER ACCEPTED.
+
+Implementation commit: `a9be83e`.
+
+Integration branch: `feat/etl-4.5.3a-multi-batch`.
+
+Accepted implementation files:
+
+- `apps/etl/ingestion_runs.py`
+- `apps/etl/tests/test_ingestion_runs.py`
+
+The coordinator delegates individual batch work to the existing Volume 4.5.2 PipelineRun services.
+
+Preserve source metadata, staging integrity, SER-v1, exact row accounting, transformation-attempt identity, result-ledger integrity, explicit recovery, replay compatibility, and PostgreSQL claim-generation fencing.
+
+Do not infer complete source scope from normal iterator exhaustion. Live extraction requires a designated single producer. Staged-range continuation does not resume upstream extraction.
+
+Owner-reported verification: 1,161 full-regression passes, 42 conditional skips, 24 focused coordinator passes, 31 single-batch regression passes, and independent review.
+
+Git implementation commit is complete; documentation commit, PR, GitHub CI, and merge remain pending.
+
+Preserve the seven historical untracked evidence artifacts.
+
+Do not introduce ingestion-wide COMPLETE transitions, authoritative extraction-completion claims, multi-producer coordination, automated healing, quarantine, warehouse publication, or Volume 4.5.3b implementation as part of this integration.
+
+Further development requires separate owner authorization.
