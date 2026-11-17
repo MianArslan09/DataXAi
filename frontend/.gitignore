@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env.local
+.npm-cache/
+
+# Generated screenshot capture runs
+docs/figures/stage5/

@@ -1,0 +1,272 @@
+{
+  "scenes": {
+    "G01-01": {
+      "state": "Shared login",
+      "figure": "4.1",
+      "role": "Public",
+      "business": null,
+      "navigation": null,
+      "route": "/login",
+      "references": []
+    },
+    "G01-02": {
+      "state": "Admin dashboard",
+      "figure": "4.1",
+      "role": "Admin",
+      "business": null,
+      "navigation": "Dashboard",
+      "route": "/admin/dashboard",
+      "references": []
+    },
+    "G01-03": {
+      "state": "Create Account",
+      "figure": "4.1",
+      "role": "Admin",
+      "business": null,
+      "navigation": "Create Account",
+      "route": "/admin/create-account",
+      "references": []
+    },
+    "G01-04": {
+      "state": "System Configuration",
+      "figure": "4.1",
+      "role": "Admin",
+      "business": null,
+      "navigation": "System Configuration",
+      "route": "/admin/configuration",
+      "references": []
+    },
+    "G02-01": {
+      "state": "Manager dashboard",
+      "figure": "4.2",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Dashboard",
+      "route": "/manager/dashboard",
+      "references": []
+    },
+    "G02-02": {
+      "state": "Seller dashboard",
+      "figure": "4.2",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Dashboard",
+      "route": "/seller/dashboard",
+      "references": []
+    },
+    "G03-01": {
+      "state": "CSV source receipt",
+      "figure": "4.3",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Submit Data",
+      "route": "/seller/submit",
+      "references": ["SUB-1048", "november_orders.csv"]
+    },
+    "G03-02": {
+      "state": "Excel workbook scope",
+      "figure": "4.3",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Submit Data",
+      "route": "/seller/submit",
+      "references": ["WB-LOOM", "retail_export.xlsx"]
+    },
+    "G03-03": {
+      "state": "Configured PostgreSQL source",
+      "figure": "4.3",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Submit Data",
+      "route": "/seller/submit",
+      "references": ["PG-LOOM"]
+    },
+    "G04-01": {
+      "state": "Running execution",
+      "figure": "4.4",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1048", "EX-1048", "ACK-1048"]
+    },
+    "G04-02": {
+      "state": "Interrupted workbook execution",
+      "figure": "4.4",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1047", "EX-1047"]
+    },
+    "G04-03": {
+      "state": "Completed simulation",
+      "figure": "4.4",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1048", "EX-1048"]
+    },
+    "G05-01": {
+      "state": "Processing Rules",
+      "figure": "4.5",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["RULE-LOOM-002", "RULE-LOOM-001"]
+    },
+    "G05-02": {
+      "state": "Validation Findings",
+      "figure": "4.5",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1048", "ROW-1048-017"]
+    },
+    "G06-01": {
+      "state": "Anomaly Detection",
+      "figure": "4.6",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1048", "FND-042", "ROW-1048-042"]
+    },
+    "G06-02": {
+      "state": "Finding Evidence",
+      "figure": "4.6",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Batch Processing",
+      "route": "/manager/batch",
+      "references": ["SUB-1048", "ROW-1048-042", "BR-042", "ZS-042", "IF-042", "OC-1042"]
+    },
+    "G07-01": {
+      "state": "Awaiting Review",
+      "figure": "4.7",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Quarantine Review",
+      "route": "/manager/quarantine",
+      "references": ["QR-042"]
+    },
+    "G07-02": {
+      "state": "Retained for Review",
+      "figure": "4.7",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Quarantine Review",
+      "route": "/manager/quarantine",
+      "references": ["QR-042"]
+    },
+    "G07-03": {
+      "state": "Authorised correction and history",
+      "figure": "4.7",
+      "role": "Manager",
+      "business": "Lahore Homewares",
+      "navigation": "Quarantine Review",
+      "route": "/manager/quarantine",
+      "references": ["QR-042", "EV-042", "OC-1042"]
+    },
+    "G08-01": {
+      "state": "Forecast detail",
+      "figure": "4.8",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Forecasts",
+      "route": "/seller/forecasts",
+      "references": ["FC-011"]
+    },
+    "G09-01": {
+      "state": "Spending detail",
+      "figure": "4.9",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Customer Spending",
+      "route": "/seller/spending",
+      "references": ["CLV-015", "CLV-016"]
+    },
+    "G09-02": {
+      "state": "Business-scoped empty state",
+      "figure": "4.9",
+      "role": "Seller",
+      "business": "Indus Textiles",
+      "navigation": "Customer Spending",
+      "route": "/seller/spending",
+      "references": ["U-03"]
+    },
+    "G10-01": {
+      "state": "Available narrative",
+      "figure": "4.10",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Repair Explanations",
+      "route": "/seller/repairs",
+      "references": ["REP-042", "OC-1042"]
+    },
+    "G10-02": {
+      "state": "Unavailable narrative",
+      "figure": "4.10",
+      "role": "Seller",
+      "business": "Lahore Homewares",
+      "navigation": "Repair Explanations",
+      "route": "/seller/repairs",
+      "references": ["REP-042", "OC-1042"]
+    }
+  },
+  "figures": [
+    {
+      "number": "4.1",
+      "caption": "Account access and administration",
+      "panels": ["G01-01", "G01-02"]
+    },
+    {
+      "number": "4.2",
+      "caption": "Manager and Seller dashboard design",
+      "panels": ["G02-01", "G02-02"]
+    },
+    {
+      "number": "4.3",
+      "caption": "Retail submission and source receipt",
+      "panels": ["G03-01", "G03-02"]
+    },
+    {
+      "number": "4.4",
+      "caption": "UC-04 batch processing and execution status",
+      "panels": ["G04-01", "G04-02"]
+    },
+    {
+      "number": "4.5",
+      "caption": "Rule configuration and validation findings",
+      "panels": ["G05-01", "G05-02"]
+    },
+    {
+      "number": "4.6",
+      "caption": "Detection findings for an invoice line",
+      "panels": ["G06-01", "G06-02"]
+    },
+    {
+      "number": "4.7",
+      "caption": "UC-05 quarantine review and repair decision",
+      "panels": ["G07-01", "G07-03"]
+    },
+    {
+      "number": "4.8",
+      "caption": "UC-08 weekly product sales forecast",
+      "panels": ["G08-01"]
+    },
+    {
+      "number": "4.9",
+      "caption": "UC-09 estimated customer net spending over 90 days",
+      "panels": ["G09-01"]
+    },
+    {
+      "number": "4.10",
+      "caption": "UC-10 Seller view of a recorded repair",
+      "panels": ["G10-01"]
+    }
+  ]
+}
