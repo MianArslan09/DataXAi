@@ -48,7 +48,7 @@ Requires a local PostgreSQL 16 and Redis 7 instance — see `.env.example` for t
 
 ## Tech Stack
 
-Django 5.2 LTS · DRF 3.15 · PostgreSQL 16 · Redis · Celery · Great Expectations 1.0+ · Pydantic v2 · scikit-learn (Isolation Forest) · Facebook Prophet · XGBoost · `btyd` (BG/NBD) · Groq (`gpt-oss`) · Loguru · Docker Compose · Nginx · pytest · GitHub Actions
+Django 5.2 LTS · DRF 3.15 · PostgreSQL 16 · Redis · Celery · Great Expectations 1.0+ · Pydantic v2 · scikit-learn (Isolation Forest) · Facebook Prophet · XGBoost · `btyd` (BG/NBD) · Groq (`gpt-oss`) · Loguru · Docker Compose · Nginx · pytest · GitHub Actions for Frontend react and vite components
 
 Full rationale for every choice — including three updates made after the original proposal (Django 4.2→5.2 LTS, Great Expectations 0.18→1.0+, `lifetimes`→`btyd`, and Groq's Llama 3 models→`gpt-oss`) — is in [`docs/handbook/volume-01-foundations.md`](docs/handbook/volume-01-foundations.md).
 
