@@ -1,0 +1,37 @@
+# Django API inventory and integration gaps
+
+Inspected on 15 November 2026 at local HEAD `75ef08d` on `feat/etl-4.5.3b-completion-proof`. The root URL configuration mounts Django Admin, `core.urls` and `accounts.urls`. The existing Django templates/static directories and Python CI belong to the backend. React has its own entry point and build under `frontend/`. [Root URL configuration](../../config/urls.py) · [CI workflow](../../.github/workflows/ci.yml)
+
+## Public routes exercised
+
+All four rows are **LOCALLY VERIFIED** through HTTP against the checkout’s WSGI application using an isolated, in-memory SQLite account database. The browser used the Vite API proxy for login, identity and refresh. The Playwright HTTP client exercised health and anonymous identity through the same proxy. This run did not use PostgreSQL or any existing user credentials.
+
+| Method and path | Input and permission | Response and observed result | Source |
+| --- | --- | --- | --- |
+| POST `/api/auth/token/` | JSON username and password, public credential exchange | Valid synthetic credentials for all three roles returned 200 with access and refresh tokens. Wrong password returned 401. | [Account routes](../../apps/accounts/urls.py), SimpleJWT TokenObtainPairView |
+| GET `/api/auth/me/` | Bearer access JWT, IsAuthenticated | 200 for each role, 401 anonymously. Serializer fields are id, username, email, role, is_active and date_joined. No business assignment field. | [MeView](../../apps/accounts/views.py), [UserSerializer](../../apps/accounts/serializers.py) |
+| POST `/api/auth/token/refresh/` | JSON refresh token, SimpleJWT validates it | 200 with a renewed access token. The adapter used it for another successful identity read. | [Account routes](../../apps/accounts/urls.py), SimpleJWT TokenRefreshView |
+| GET `/api/health/` | Public, AllowAny | 200 with database true and status ok. The 503 degraded branch is source-inspected only. | [Core routes](../../apps/core/urls.py), [HealthCheckView](../../apps/core/views.py) |
+
+Django wraps handled failures in an error envelope with code and message. The UI maps response status and connection failures to controlled messages. Browser-intercepted tests cover 403, 503, connection loss, unknown roles, and expired refresh credentials. [Exception handler](../../apps/core/exceptions.py) · [Adapter](../src/services/apiClient.ts) · [Live HTTP test](../tests/live.spec.ts) · [Intercepted-response tests](../tests/api.spec.ts)
+
+## Business identity and role permissions
+
+The adapter preserves the raw role and derives an application role from a single map. Unknown values receive an unsupported-role error. In API mode the user retains null business identifiers. Django’s Data Engineer and Business Analyst access rules predate the approved Manager and Seller use cases. Django Admin privileges, role identifiers, and business access require independent server checks on future routes. [Role adapter](../src/auth/roleAdapter.ts) · [User model](../../apps/accounts/models.py) · [Permission classes](../../apps/core/permissions.py)
+
+## Workflow gap register
+
+Each workflow below is **TESTED** with the demonstration provider. A public API supplying that capability was absent from the inspected URL configuration. Live workflow integration is **DEFERRED**. Future routes and payloads require separate backend approval. The local provider and the typed frontend contracts identify which view data would need an adapter. [Demo provider](../src/services/demo.ts) · [Contracts](../src/services/contracts.ts)
+
+| Screen or workflow | Current backend boundary | Missing contract and future verification | Required access and business scope | Current demonstration provider |
+| --- | --- | --- | --- | --- |
+| Admin dashboard, Users, Create Account | Custom User and read-only current-user serializer. Django Admin manages accounts. No public directory or account-write endpoint. | Paginated users, role totals, validated account creation, password policy, conflicts and a persisted account reference. | Admin role and server-authorised organisation scope. | snapshot, createAccount |
+| Business Assignments and System Configuration | Current user has no business relationship. No management/settings API is mounted. | Authoritative business memberships, assignment changes, configuration reads/writes and audit. Recheck identity after membership changes. | Admin-only changes and allowed organisation membership. | assignBusiness, setReviewReminder |
+| Seller submission and submission status | CSV/Excel/PostgreSQL SourceBatch sources and ETL staging services run internally. No authenticated file submission or listing route. | File validation, receipt, durable submission identity, ownership, list/detail and failure responses. Verify source immutability. | Seller upload and read within assigned business. Manager read within supervised business. | submit, snapshot |
+| Manager batch processing and dashboard | PipelineRun, staging, single-batch and sequential coordinators are internal Python services. No request or execution-status route. | Submission-bound request receipt, execution identifier, transitions, failure and committed batch/row counts. Verify persistence, retry and fencing semantics before displaying completion. | Manager-compatible permission plus tenant check on submission and execution. | advance, snapshot |
+| Quarantine review and Manager decisions | Healing QuarantineRecord preserves raw value, recommendation, status, actor and timestamp. The internal resolve method has its own status vocabulary. Validation and detection expose no view supplying order evidence. | Scoped queue, order-evidence retrieval, original versus proposed values, explicit decision mapping, concurrent resolution handling and durable outcome. | Scoped Manager review with server-side authorisation for each decision. | decide, snapshot |
+| Seller repair explanations | Healing and warehouse models carry some operational data. NLP has no public view for repair facts, templates or Groq output. | Retrieve committed repair facts and source lineage, independent template, optional generated text and provider errors. Check arithmetic independently of narrative availability. | Seller read access to own business and published evidence. | narrate, snapshot |
+| Weekly product-demand forecasts | Forecasting, dashboard and warehouse have no public forecast-result API. OrderLine stores transaction history. | Product and period selection, units, time zone, actual/predicted series, model run, result date and availability. | Seller read access for authorised business and products. | snapshot.forecasts |
+| 90-day customer spending | CLV has no public spending-result API. Warehouse Customer and OrderLine are internal models. | Customer scope, currency, prediction horizon, as-of date, model run and recomputation state. | Seller read access for authorised business and customers. | snapshot.spending |
+
+Internal boundaries can be traced to the [ETL coordinator](../../apps/etl/ingestion_runs.py), [single-batch services](../../apps/etl/pipeline_runs.py), [staging models](../../apps/etl/models.py), [quarantine model](../../apps/healing/models.py) and [warehouse models](../../apps/warehouse/models.py). Dashboard, detection, validation, forecasting, CLV and NLP view modules currently provide no mounted product API. The evidence here covers frontend verification and the four HTTP routes above. Backend ETL, healing, model execution and Groq execution remain outside this milestone.
