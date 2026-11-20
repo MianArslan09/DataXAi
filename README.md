@@ -6,7 +6,7 @@ Final Year Project — BS Software Engineering, National University of Modern La
 
 The project aims to detect eight classes of data-quality faults in e-commerce pipelines, repair eligible records, quarantine unresolved cases, and use cleaned data for demand forecasting and customer lifetime value estimation. The [engineering handbook](docs/handbook/) describes the design.
 
-**Team:** M Arslan Ahmad ([@Arslan](https://github.com)) · Fatima Munawar
+**Team:** M Arslan Ahmad ([@Arslan](https://github.com)) 
 **Supervisor:** Mr. Usama Shahzore, Dept. of Software Engineering, NUML Faisalabad
 
 ## Dataset
