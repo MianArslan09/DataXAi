@@ -27,7 +27,12 @@ class CsvSource:
     def __enter__(self) -> "CsvSource":
         if not self.path.exists():
             raise SourceNotFoundError(f"CSV file not found: {self.path}")
-        self._reader = pd.read_csv(self.path, chunksize=self.batch_size, encoding=self.encoding)
+        return self._open(self.path)
+
+    def _open(self, stream_or_path) -> "CsvSource":
+        self._reader = pd.read_csv(
+            stream_or_path, chunksize=self.batch_size, encoding=self.encoding
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
