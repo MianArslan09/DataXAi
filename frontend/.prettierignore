@@ -1,0 +1,6 @@
+dist
+test-results
+playwright-report
+.npm-cache
+package-lock.json
+docs/figures

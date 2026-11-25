@@ -6,7 +6,7 @@ Final Year Project — BS Software Engineering, National University of Modern La
 
 The project aims to detect eight classes of data-quality faults in e-commerce pipelines, repair eligible records, quarantine unresolved cases, and use cleaned data for demand forecasting and customer lifetime value estimation. The [engineering handbook](docs/handbook/) describes the design.
 
-**Team:** M Arslan Ahmad ([@Arslan](https://github.com)) · Fatima Munawar
+**Team:** M Arslan Ahmad ([@Arslan](https://github.com))
 **Supervisor:** Mr. Usama Shahzore, Dept. of Software Engineering, NUML Faisalabad
 
 ## Dataset
@@ -48,7 +48,7 @@ Requires a local PostgreSQL 16 and Redis 7 instance — see `.env.example` for t
 
 ## Tech Stack
 
-The integrated frontend uses React 19, TypeScript and Vite. Its demo provider drives eight Admin, Manager and Seller views. API mode connects JWT login, identity, refresh and health to Django. See the [frontend README](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/README.md) and the [business API gap inventory](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/docs/INTEGRATION.md).
+The integrated frontend uses React 19, TypeScript and Vite. Its demo provider drives eight Admin, Manager and Seller views. API mode connects JWT login, identity, refresh and health to Django. Frontend CI checks TypeScript and formatting, builds the production bundle, and runs Playwright regression and screenshot-evidence checks. See the [frontend README](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/README.md) and the [business API gap inventory](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/docs/INTEGRATION.md).
 
 Backend stack and planned module dependencies:
 
