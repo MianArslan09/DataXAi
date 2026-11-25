@@ -107,6 +107,8 @@ SOURCE_DATABASE_URL = source_database_url(config)
 
 # Where CSV-source files are read from by default (M1's CSV source, Volume 4.2).
 ETL_DATA_DIR = config("ETL_DATA_DIR", default=str(BASE_DIR / "data"))
+# Provision a private local directory outside the checkout and served roots.
+ETL_SNAPSHOT_ROOT = config("ETL_SNAPSHOT_ROOT", default="")
 
 AUTH_USER_MODEL = "accounts.User"
 

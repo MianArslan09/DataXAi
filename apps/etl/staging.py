@@ -100,6 +100,12 @@ def stage_source_batch(*, ingestion_id: UUID, batch: SourceBatch) -> StagingBatc
     are explicit because bulk_create() does not run model full_clean(). The accepted
     escaped-text fields handle database encoding. No source values enter errors.
     """
+    staged, _ = _stage_with_digest(ingestion_id=ingestion_id, batch=batch)
+    return staged
+
+
+def _stage_with_digest(*, ingestion_id: UUID, batch: SourceBatch) -> tuple[StagingBatch, str]:
+    """Keep the digest of the validated input independent of the persisted manifest."""
     _require(type(ingestion_id) is UUID, "A UUID ingestion identity is required.")
     _require(type(batch) is SourceBatch, "Raw staging requires a SourceBatch.")
     _require(
@@ -136,7 +142,7 @@ def stage_source_batch(*, ingestion_id: UUID, batch: SourceBatch) -> StagingBatc
         if existing is not None:
             if existing.content_hash != content_hash:
                 raise StagingConflictError()
-            return existing
+            return existing, content_hash
 
         if ingestion.status != StagingIngestion.Status.OPEN:
             raise StagingIngestionError("Only an OPEN ingestion can accept a new batch.")
@@ -176,4 +182,4 @@ def stage_source_batch(*, ingestion_id: UUID, batch: SourceBatch) -> StagingBatc
             == staged.row_count,
             "The persisted staging row count is inconsistent.",
         )
-        return staged
+        return staged, content_hash

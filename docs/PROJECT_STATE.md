@@ -1659,3 +1659,47 @@ Implementation Git commit is complete. Documentation commit, PR, remote CI, and 
 Seven historical evidence artifacts remain excluded from version control.
 
 Volume 4.5.3b — Evidence-Gated Ingestion Completion — remains a separately authorized milestone. This acceptance does not authorize its implementation or Volume 4.6.
+
+## 2026-11-25 — Volume 4.5.3b: Evidence-Gated Ingestion Completion
+
+**FORMALLY OWNER ACCEPTED on 2026-11-25 for the implemented, Windows/PostgreSQL/UCI-verified bound CSV/Excel completion scope, with the limitations documented below.** Git history places the technical commit `2c0df0c` on `feat/etl-4.5.3b-completion-proof`, directly after the accepted 4.5.3a PR #12 merge `75ef08d`. It contains eleven Python files and the operating guide. The index was empty at inspection. GitHub main verified at `beecd17edff377dfa19d113b772323e428d9fc26` includes frontend PR #13 (`1e739d1`). The feature branch is one commit ahead and three behind main. Its name was absent from remote heads and its implementation awaits integration.
+
+### What COMPLETE certifies
+
+`bind_file_ingestion()` binds the retained CSV/XLSX bytes, parser scope and configuration to the ingestion before extraction. `complete_bound_ingestion()` uses the ordered staged-batch manifest and reconciles source rows, staged positions and the selected execution's successful SAFE/UNRESOLVED ledger. Receipt sealing and the COMPLETE transition share one PostgreSQL transaction. Acknowledgment verifies the persisted receipt. Explicit recovery may reread the retained snapshot and verify previously committed batches.
+
+SER-v1 identity, independent reconstruction, positional lineage, SQL NULL outcome payloads and claim-generation fencing remain in force. SAFE describes date interpretation. Business validation, anomaly detection, repair, quarantine resolution, clean warehouse publication, forecasting and CLV have separate delivery gates. PostgreSQL-source completion remains deferred.
+
+### Recorded Windows verification
+
+| Owner-executed check | Recorded result |
+| --- | --- |
+| Focused completion and snapshot tests | 93 passed, 1 skipped |
+| ETL regression | 1,229 passed, 43 skipped |
+| Full backend regression | 1,254 passed, 43 skipped |
+| Django system and migration checks | Passed, no migration drift |
+| Quality and parity | Ruff and Git whitespace checks passed. Black and isort passed on the 11 relevant Python files. All 12 implementation/archive SHA-256 comparisons matched at review. |
+
+The broader suites include 42 conditional historical-checkout skips and the native directory-fsync test skipped on Windows. The first Black/isort invocation also scanned third-party virtual-environment files. The scoped runs supply the quality evidence. These are prior executions.
+
+The owner verified the identity of the isolated `dataxai_completion_review` database, applied `etl.0004_ingestion_completion_proof` and verified Windows ACLs and application checks on `D:\DataXAi-Snapshots`. The sealed proof persisted across a Docker Desktop restart. Native Linux directory durability and production parser-account isolation remain unverified.
+
+### Real UCI interruption, recovery and acknowledgment
+
+The original `online_retail_II.xlsx` matched SHA-256 `bcbe73b35f5b7babf197fb0cb983a11f5d9ff929078d4aa53d171b1f2df2e980`. The external reports record natural traversal of both selected sheets. Year 2009-2010 contributed 525,461 rows in 11 batches and Year 2010-2011 contributed 541,910 in 11. The owner verified 1,067,371 source and staged rows across 22 batches, 1,067,371 SAFE outcomes, zero UNRESOLVED, PostgreSQL COMPLETE and the persisted sealed proof.
+
+| Stage | Result | Elapsed |
+| --- | --- | ---: |
+| Interrupt after full traversal and before sealing | INTERRUPTED_AFTER_TRAVERSAL, exit 0 | 1,812.50 s |
+| Recover from retained snapshot | VERIFIED, sealed, exit 0 | 3,130.46 s |
+| Acknowledge persisted proof (retry) | VERIFIED, exit 0 | 1.97 s |
+
+The first acknowledgment failed with `OperationalError` around the Docker restart. An independent PostgreSQL proof check then passed. Recovery and successful acknowledgment reports agree on receipt digest `eca1cf10e55d310893f10d3a9d794972a05f6c50172eb71a2f8691727826882f` and manifest digest `19184a1538e92dc7b2fac2b74cb677480b5e17df34d0b727bd64e64b8f5c1023`. The four saved stage/diagnostic reports were inspected for this reconciliation. The successful retry is archived outside Git at `D:\DataXAi-Benchmark-Evidence\completion-ack-retry-f1f9c35e-1428-4e85-898a-d32a24421661.json`. Exit codes and the database check are owner-reported.
+
+### Frontend and next decision
+
+PR #13 integrated React 19, TypeScript, Vite and frontend CI. Eight thesis views cover Admin, Manager and Seller. JWT login, identity, token refresh and health have historical live HTTP verification using isolated SQLite. Business workflows including processing, quarantine decisions, repairs and analytics use demonstration data and await scoped backend APIs.
+
+The November 16 Stage 1 record preserves the initial formatting failure. Follow-up verification records its correction, successful type checking and production builds, and 29 passing Playwright tests. Historical screenshots and Stage 5 capture instructions exist. Complete Stage 5 capture and production deployment remain unverified.
+
+Owner decision (2026-11-25): Volume 4.5.3b is FORMALLY ACCEPTED for bound CSV/Excel completion, recovery and persisted-receipt verification. Native Linux directory durability and production parser-account isolation remain NOT VERIFIED; PostgreSQL-source completion remains DEFERRED. These limitations are not represented as passed checks. Documentation commit and main integration remain pending. Volume 4.6 remains unauthorized.

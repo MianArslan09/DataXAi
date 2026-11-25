@@ -283,6 +283,118 @@ class StagingIngestion(TimeStampedModel):
         ]
 
 
+_RECEIPT_FIELDS = (
+    "source_batches",
+    "source_rows",
+    "staged_batches",
+    "staged_rows",
+    "successful_batches",
+    "safe_rows",
+    "unresolved_rows",
+    "manifest_digest",
+    "coverage",
+    "sealed_at",
+    "receipt_digest",
+)
+
+
+class IngestionCompletionProof(models.Model):
+    """Pre-extraction binding and a single atomic receipt for a retained file."""
+
+    ingestion = models.OneToOneField(
+        StagingIngestion,
+        on_delete=models.PROTECT,
+        primary_key=True,
+        related_name="completion_proof",
+    )
+    proof_version = models.PositiveSmallIntegerField(default=1)
+    bound_at = models.DateTimeField()
+    source_kind = models.CharField(max_length=8)
+    source_reference = models.CharField(max_length=255)
+    snapshot_sha256 = models.CharField(max_length=64)
+    snapshot_size = models.PositiveBigIntegerField()
+    parser_recipe = models.JSONField()
+    batch_size = models.PositiveIntegerField()
+    execution_key = models.UUIDField()
+    transformation_version = models.CharField(max_length=128)
+    configuration = models.JSONField(validators=[validate_attempt_configuration])
+    configuration_hash = models.CharField(max_length=64)
+    expected_batches = models.PositiveBigIntegerField(null=True)
+    expected_rows = models.PositiveBigIntegerField(null=True)
+    binding_digest = models.CharField(max_length=64)
+
+    source_batches = models.PositiveBigIntegerField(null=True)
+    source_rows = models.PositiveBigIntegerField(null=True)
+    staged_batches = models.PositiveBigIntegerField(null=True)
+    staged_rows = models.PositiveBigIntegerField(null=True)
+    successful_batches = models.PositiveBigIntegerField(null=True)
+    safe_rows = models.PositiveBigIntegerField(null=True)
+    unresolved_rows = models.PositiveBigIntegerField(null=True)
+    manifest_digest = models.CharField(max_length=64, null=True)
+    coverage = models.JSONField(null=True)
+    sealed_at = models.DateTimeField(null=True)
+    receipt_digest = models.CharField(max_length=64, null=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    proof_version=1,
+                    source_kind__in=["CSV", "EXCEL"],
+                    batch_size__gte=1,
+                    source_reference__regex=_REFERENCE_PATTERN,
+                    snapshot_sha256__regex=_HASH_PATTERN,
+                    configuration_hash__regex=_HASH_PATTERN,
+                    binding_digest__regex=_HASH_PATTERN,
+                ),
+                name="etl_proof_binding_domain",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(**{f"{key}__isnull": True for key in _RECEIPT_FIELDS})
+                    | (
+                        models.Q(**{f"{key}__isnull": False for key in _RECEIPT_FIELDS})
+                        & models.Q(
+                            receipt_digest__regex=_HASH_PATTERN,
+                            manifest_digest__regex=_HASH_PATTERN,
+                            source_batches=models.F("staged_batches"),
+                            successful_batches=models.F("staged_batches"),
+                            source_rows=models.F("staged_rows"),
+                            safe_rows=models.F("staged_rows") - models.F("unresolved_rows"),
+                        )
+                        & (
+                            models.Q(expected_batches__isnull=True)
+                            | models.Q(expected_batches=models.F("source_batches"))
+                        )
+                        & (
+                            models.Q(expected_rows__isnull=True)
+                            | models.Q(expected_rows=models.F("source_rows"))
+                        )
+                    )
+                ),
+                name="etl_proof_receipt_complete",
+            ),
+            models.CheckConstraint(
+                condition=LessThanOrEqual(
+                    Length(Cast("parser_recipe", models.TextField())), models.Value(16384)
+                ),
+                name="etl_proof_recipe_size",
+            ),
+            models.CheckConstraint(
+                condition=LessThanOrEqual(
+                    Length(Cast("configuration", models.TextField())), models.Value(16384)
+                ),
+                name="etl_proof_config_size",
+            ),
+            models.CheckConstraint(
+                condition=LessThanOrEqual(
+                    Length(Cast("coverage", models.TextField())), models.Value(65536)
+                ),
+                name="etl_proof_coverage_size",
+            ),
+        ]
+
+
 class StagingBatch(models.Model):
     """SER-v1 header plus source provenance; records are stored positionally below.
 

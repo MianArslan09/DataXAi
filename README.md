@@ -6,7 +6,7 @@ Final Year Project — BS Software Engineering, National University of Modern La
 
 The project aims to detect eight classes of data-quality faults in e-commerce pipelines, repair eligible records, quarantine unresolved cases, and use cleaned data for demand forecasting and customer lifetime value estimation. The [engineering handbook](docs/handbook/) describes the design.
 
-**Team:** M Arslan Ahmad ([@Arslan](https://github.com)) 
+**Team:** M Arslan Ahmad ([@Arslan](https://github.com))
 **Supervisor:** Mr. Usama Shahzore, Dept. of Software Engineering, NUML Faisalabad
 
 ## Dataset
@@ -48,7 +48,11 @@ Requires a local PostgreSQL 16 and Redis 7 instance — see `.env.example` for t
 
 ## Tech Stack
 
-Django 5.2 LTS · DRF 3.15 · PostgreSQL 16 · Redis · Celery · Great Expectations 1.0+ · Pydantic v2 · scikit-learn (Isolation Forest) · Facebook Prophet · XGBoost · `btyd` (BG/NBD) · Groq (`gpt-oss`) · Loguru · Docker Compose · Nginx · pytest · GitHub Actions for Frontend react and vite components
+The integrated frontend uses React 19, TypeScript and Vite. Its demo provider drives eight Admin, Manager and Seller views. API mode connects JWT login, identity, refresh and health to Django. Frontend CI checks TypeScript and formatting, builds the production bundle, and runs Playwright regression and screenshot-evidence checks. See the [frontend README](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/README.md) and the [business API gap inventory](https://github.com/MianArslan09/DataXAi/blob/beecd17edff377dfa19d113b772323e428d9fc26/frontend/docs/INTEGRATION.md).
+
+Backend stack and planned module dependencies:
+
+Django 5.2 LTS · DRF 3.15 · PostgreSQL 16 · Redis · Celery · Great Expectations 1.0+ · Pydantic v2 · scikit-learn (Isolation Forest) · Facebook Prophet · XGBoost · `btyd` (BG/NBD) · Groq (`gpt-oss`) · Loguru · Docker Compose · Nginx · pytest · GitHub Actions
 
 Full rationale for every choice — including three updates made after the original proposal (Django 4.2→5.2 LTS, Great Expectations 0.18→1.0+, `lifetimes`→`btyd`, and Groq's Llama 3 models→`gpt-oss`) — is in [`docs/handbook/volume-01-foundations.md`](docs/handbook/volume-01-foundations.md).
 
@@ -56,6 +60,7 @@ Full rationale for every choice — including three updates made after the origi
 
 ```
 dataxai/
+├── frontend/            # React/TypeScript/Vite application on main (PR #13)
 ├── config/              # Django project package: settings/, celery.py, asgi.py, urls.py
 ├── apps/                # One app per module: core, accounts, etl (M1), validation (M2),
 │                         #   detection (M3), healing (M4), forecasting + clv (M5),
@@ -70,7 +75,7 @@ dataxai/
 
 ## Status
 
-As of November 8, 2026, Volume 4.4.7 is integrated and the owner has accepted performance Gates 1–5. Performance-series Git integration is pending. The full ETL workflow remains incomplete. See [project state](docs/PROJECT_STATE.md) for benchmark evidence and the outstanding replay-threshold acknowledgment, and the [roadmap](docs/PROJECT_ROADMAP.md) for milestone boundaries.
+As of November 25, 2026, performance Gates 1–5, sequential ETL coordination and the React frontend are integrated through PRs #10, #12 and #13 respectively. On the backend feature branch, Volume 4.5.3b adds evidence-gated CSV/Excel completion. Owner-side Windows verification reconciled 1,067,371 UCI rows across 22 PostgreSQL batches and verified the sealed proof after recovery. Volume 4.5.3b was formally owner accepted on November 25, 2026, for the verified bound CSV/Excel scope with documented limitations; GitHub integration remains pending. Repairs, quarantine and predictive results shown in the frontend use demo data. See [project state](docs/PROJECT_STATE.md) for the evidence and [roadmap](docs/PROJECT_ROADMAP.md) for the remaining gates.
 
 ## License
 

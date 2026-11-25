@@ -13,6 +13,7 @@ drop half the real dataset.
 """
 
 import logging
+from contextlib import closing
 from pathlib import Path
 from typing import Iterator, Optional, Sequence, Union
 
@@ -45,8 +46,11 @@ class ExcelSource:
     def __enter__(self) -> "ExcelSource":
         if not self.path.exists():
             raise SourceNotFoundError(f"Excel workbook not found: {self.path}")
+        return self._open(self.path)
+
+    def _open(self, stream_or_path) -> "ExcelSource":
         try:
-            self._workbook = openpyxl.load_workbook(self.path, read_only=True, data_only=True)
+            self._workbook = openpyxl.load_workbook(stream_or_path, read_only=True, data_only=True)
         except Exception as exc:
             # openpyxl raises several distinct exception types for corrupt/non-xlsx files
             raise MalformedSourceError(f"Could not open workbook {self.path}: {exc}") from exc
@@ -69,38 +73,94 @@ class ExcelSource:
             self._workbook = None
 
     def extract(self) -> Iterator[SourceBatch]:
+        yield from self._extract()
+
+    def _extract(self, visits=None) -> Iterator[SourceBatch]:
         if self._workbook is None:
             raise RuntimeError(
                 "ExcelSource must be used as a context manager: `with ExcelSource(...) as s:`"
             )
         batch_number = 0
         for sheet_name in self.sheet_names:
+            first_batch = batch_number
+            sheet_rows = 0
             worksheet = self._workbook[sheet_name]
-            rows_iter = worksheet.iter_rows(values_only=True)
+            if visits is None:
+                rows_iter = worksheet.iter_rows(values_only=True)
+            else:
+                visits.entered.append(sheet_name)
+                rows_iter = self._bound_rows(worksheet)
             try:
-                header = list(next(rows_iter))
-            except StopIteration:
-                logger.warning(
-                    "excel_source.empty_sheet", extra={"path": str(self.path), "sheet": sheet_name}
-                )
-                continue
+                try:
+                    header = list(next(rows_iter))
+                except StopIteration:
+                    if visits is not None:
+                        raise MalformedSourceError("Selected worksheet has no header.") from None
+                    logger.warning(
+                        "excel_source.empty_sheet",
+                        extra={"path": str(self.path), "sheet": sheet_name},
+                    )
+                    continue
 
-            missing = set(CANONICAL_COLUMNS) - set(header)
-            if missing:
-                raise MissingColumnsError(
-                    f"{self.path} sheet '{sheet_name}' is missing columns: {sorted(missing)}"
-                )
+                missing = set(CANONICAL_COLUMNS) - set(header)
+                if visits is not None and (
+                    any(
+                        type(name) is not str or not name.strip() or "\0" in name for name in header
+                    )
+                    or len(set(header)) != len(header)
+                ):
+                    raise MalformedSourceError("Invalid selected worksheet header.")
+                if missing:
+                    raise MissingColumnsError(
+                        f"{self.path} sheet '{sheet_name}' is missing columns: {sorted(missing)}"
+                    )
 
-            buffer = []
-            for row in rows_iter:
-                buffer.append(row)
-                if len(buffer) >= self.batch_size:
+                buffer = []
+                for row in rows_iter:
+                    buffer.append(row)
+                    if len(buffer) >= self.batch_size:
+                        if visits is not None:
+                            sheet_rows += len(buffer)
+                        yield self._make_batch(header, buffer, sheet_name, batch_number)
+                        batch_number += 1
+                        buffer = []
+                if buffer:
+                    if visits is not None:
+                        sheet_rows += len(buffer)
                     yield self._make_batch(header, buffer, sheet_name, batch_number)
                     batch_number += 1
-                    buffer = []
-            if buffer:
-                yield self._make_batch(header, buffer, sheet_name, batch_number)
-                batch_number += 1
+            finally:
+                if visits is not None:
+                    rows_iter.close()
+            if visits is not None:
+                visits.completed.append(sheet_name)
+                visits.counts.append((sheet_rows, batch_number - first_batch))
+
+    @staticmethod
+    def _bound_rows(worksheet):
+        # The normal read-only iterator stops at declared dimensions, even when
+        # the XML contains more rows/cells. Read to XML EOF in this same pass.
+        if not hasattr(worksheet, "reset_dimensions"):
+            raise MalformedSourceError("Unsupported worksheet type.")
+        height, width = worksheet.max_row, worksheet.max_column
+        if (
+            (height is None) != (width is None)
+            or (width or 0) > 16_384
+            or (height or 0) > 1_048_576
+        ):
+            raise MalformedSourceError("Unsupported worksheet dimensions.")
+        worksheet.reset_dimensions()
+        row_number = 0
+        with closing(worksheet.iter_rows(min_row=1, values_only=True)) as rows:
+            for row_number, row in enumerate(rows, start=1):
+                if height is not None and (row_number > height or len(row) > width):
+                    raise MalformedSourceError("Worksheet data exceeds declared dimensions.")
+                # Preserve the normal adapter's padding for sparse worksheet rows.
+                if width is not None and len(row) < width:
+                    row += (None,) * (width - len(row))
+                yield row
+        if height is not None and row_number != height:
+            raise MalformedSourceError("Worksheet data disagrees with declared dimensions.")
 
     def _make_batch(self, header, rows, sheet_name: str, batch_number: int) -> SourceBatch:
         df = pd.DataFrame(rows, columns=header)
