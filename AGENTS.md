@@ -200,3 +200,11 @@ Preserve the seven historical untracked evidence artifacts.
 Do not introduce ingestion-wide COMPLETE transitions, authoritative extraction-completion claims, multi-producer coordination, automated healing, quarantine, warehouse publication, or Volume 4.5.3b implementation as part of this integration.
 
 Further development requires separate owner authorization.
+
+## 2026-11-25 — Current gate: 4.5.3b formally owner accepted
+
+This checkpoint supersedes earlier integration and development-gate summaries. PR #12 integrated 4.5.3a. PR #13 integrated the React frontend and its CI. Its business workflows use demo data. Live API coverage is limited to JWT login, identity, refresh and health.
+
+Volume 4.5.3b is implemented in local commit `2c0df0c`, independently reviewed and Windows/PostgreSQL/UCI verified per the [project state](docs/PROJECT_STATE.md). Formal owner acceptance was granted on 2026-11-25 for the verified bound CSV/Excel scope with documented limitations; main integration remains pending. Preserve snapshot custody, parser binding, ordered lineage, SER-v1, SQL NULL outcomes, fenced retries and atomic receipt sealing. COMPLETE covers bound extraction, staging and interpretation. Keep downstream business services separately gated.
+
+Use separate technical and documentation/acceptance commits. The existing technical commit already includes the original operating guide. Preserve history and review guide amendments with the documentation changes. Keep the index, unrelated work, separate frontend worktree, archives and external evidence intact. Obtain owner authorization for each Git action and before any Volume 4.6 work.

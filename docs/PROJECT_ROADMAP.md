@@ -231,3 +231,9 @@ Documentation Git commit, PR, GitHub CI, and merge remain pending at this dated 
 Volume 4.5.3a does not prove whole-ingestion completeness, finalize ingestion status, perform automated healing, publish warehouse data, or authorize Volume 4.5.3b development.
 
 This checkpoint supersedes older planning-only status statements without deleting historical records.
+
+## 2026-11-25 — Current milestone and integration
+
+Volume 4.5.3a is integrated through PR #12. React and frontend CI are integrated through PR #13. The active 4.5.3b technical commit is `2c0df0c`. Bound CSV/Excel completion, recovery and receipt acknowledgment are implemented and technically verified on Windows with PostgreSQL and UCI. The owner formally accepted the verified bound CSV/Excel scope on 2026-11-25 with the documented limitations; integration into main remains pending. Native Linux durability and production parser-account isolation remain open. See the [November 25 project-state checkpoint](PROJECT_STATE.md#2026-11-25--volume-453b-evidence-gated-ingestion-completion).
+
+The next action is the separate documentation commit and a reviewed pull request against main. Volume 4.6 (error handling) remains unauthorized. Business validation, healing, warehouse publication and predictive services remain separate roadmap work.

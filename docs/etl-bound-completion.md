@@ -107,3 +107,7 @@ expose snapshot capture, pre/post checks, inclusive traversal, processing, lock 
 and lock-through-commit seconds. SQL wrapper time excludes some fetching and commit
 work. Nested durations overlap. Investigate repeatable regressions against trial
 variability and stage measurements before attributing a cause.
+
+## Windows verification checkpoint — 2026-11-25
+
+The owner verified the 22-batch UCI interruption after traversal, explicit recovery and persisted receipt acknowledgment in an isolated PostgreSQL database. The [project-state checkpoint](PROJECT_STATE.md#2026-11-25--volume-453b-evidence-gated-ingestion-completion) records timings, matching digests, the failed first acknowledgment and the successful retry. Native Linux directory-sync evidence and production parser-account isolation remain open. The owner formally accepted the verified bound CSV/Excel scope on 2026-11-25 with these documented limitations; GitHub integration remains pending.
