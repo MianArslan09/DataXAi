@@ -222,3 +222,35 @@ Prior Codex evidence records 101 focused tests passed with zero failures/skips a
 Integration is restricted to the two Python files plus `docs/PROJECT_STATE.md`, `docs/PROJECT_ROADMAP.md` and `AGENTS.md`, with separate technical and documentation commits. Stop on unexpected changes, baseline movement, conflicts or failed CI; do not change implementation without authorization. Preserve original/backend/frontend/review worktrees, unrelated files, archives and datasets; do not delete branches or worktrees.
 
 Gate 2 (Source and Cleanup Correctness) and Gate 3 are not implemented and not yet authorized. Stop after Gate 1 Git integration. Keep later milestones separately gated and preserve snapshot custody, SER-v1, lineage, SQL NULL outcomes, fencing, explicit recovery and atomic evidence-backed completion. SAFE is interpretation, not business validation.
+
+## Permanent engineering guardrails — all volumes, subphases and gates
+
+These rules apply to all future work, alongside explicit owner authorization and the existing preservation rules.
+
+- Preserve previously accepted contracts. Identify any necessary contract change and obtain owner approval before implementing it.
+- Review cross-component compatibility, including callers, wrappers, consumers and cleanup paths; a local fix must not silently change another component's guarantees.
+- Preserve meaningful exception categories, reasons, error codes and recovery guidance across component boundaries. Unknown failures must remain conservative.
+- Protect sensitive information in errors, logs and diagnostic outputs. Use controlled diagnostic text; do not expose credentials, raw source values, source paths or query details unnecessarily.
+- Preserve internal metadata, provenance, source identity and lineage. Sanitize diagnostic projections without rewriting source data or authoritative evidence.
+- Maintain requirement-to-implementation-to-evidence traceability: state the demonstrated problem, affected code, expected behavior and actual verification.
+- Run focused regression tests for changed behavior and affected compatibility contracts. Disclose skipped checks and distinguish prior evidence from current execution.
+- Critically review correctness, failure paths, cleanup, security, compatibility and scope before delivery.
+- Explicitly disclose limitations and unresolved issues; do not equate local verification, owner acceptance, CI success and Git integration.
+- Choose the smallest safe implementation. Reuse existing mechanisms; avoid speculative abstractions, new architectural layers and overengineering.
+- Avoid unnecessary tests, repeated suites, benchmarks and compute consumption. Expand verification only for a specific unresolved risk and within owner authorization.
+- Use project-oriented names for new branches, such as `feat/<module>-<milestone>-<purpose>`, rather than tool-oriented prefixes. Do not rename existing branches without explicit authorization.
+- Preserve the repository owner's configured Git author and committer identity. Do not change Git identity configuration or override author/committer identity through command flags or environment variables without explicit owner authorization.
+
+## 2026-11-26 — Current gate: Volume 4.6 Gate 2 locally accepted; manual integration pending
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE2 AGENTS -->
+
+This checkpoint supersedes earlier current-gate and integration-authorization summaries while preserving their history. Gate 1 is integrated through [PR #15](https://github.com/MianArslan09/DataXAi/pull/15), merge commit c70ffd14899ac69792d18d93bb109ca9f46e31f5. Gate 2 is IMPLEMENTED, TESTED and LOCALLY VERIFIED within its reported scope; the owner accepts the implementation and targeted review corrections within that scope.
+
+Gate 2 improves source opening/parsing classification, safe diagnostics, resource cleanup and snapshot verification after successful cleanup. The independent source review's two findings were corrected: recognized database classification now survives exact generic ETLError wrapping, and source paths/worksheet/table names are removed from adapter operational extras and missing-column messages. Preserve source metadata, parser configuration, lineage and completion safeguards.
+
+Prior Codex execution evidence is separate and overlapping: original focused tests 83 passed; original selected regressions 239 passed with one Windows platform skip for POSIX directory fsync; final correction/affected-compatibility tests 160 passed with zero failures/skips. Targeted Ruff, Black, isort and whitespace checks passed at the reported implementation and correction checkpoints. Do not add these counts or present the earlier regression run as a rerun after corrections. See [PROJECT_STATE.md](docs/PROJECT_STATE.md) for exact scope, review provenance and limitations.
+
+The existing worktree is D:\dataxai-etl-4.6-gate2 on codex/etl-4.6-gate2, with HEAD c70ffd14899ac69792d18d93bb109ca9f46e31f5. Gate 2 technical changes are uncommitted. Automated Git integration authorization is withdrawn: the owner will manually stage, commit, push, create/merge the PR and review CI. Manual Git integration and Gate 2 CI verification remain pending. No Gate 2 commit, push, PR or merge was performed by Codex.
+
+The current authorization covers only AGENTS.md, docs/PROJECT_STATE.md and docs/PROJECT_ROADMAP.md. No tests or benchmarks were rerun for this documentation task. Do not modify technical files, stage, commit, push, create/merge PRs, rename branches, change Git configuration, alter other worktrees or update the Excel tracker. Gate 3 is not implemented or authorized; stop after documentation and reporting. Volume 4.6 remains incomplete.

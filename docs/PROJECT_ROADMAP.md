@@ -249,3 +249,17 @@ Volume 4.6 Gate 1 is IMPLEMENTED, TESTED and LOCALLY VERIFIED within its focused
 Safe catalog descriptors and conservative recovery guidance preserve existing exception behavior. No persistence, migration, state transition, retry orchestration, service instrumentation or frontend API is added. Diagnostics do not establish retry eligibility or committed state. See the [dated project-state record](PROJECT_STATE.md#2026-11-26--volume-46-gate-1-verification-and-authorized-git-integration) for evidence, limitations and the integration conditions. Tests were not rerun for this checkpoint; PR, CI and merge remain pending at its preparation.
 
 Gate 2 (Source and Cleanup Correctness) and Gate 3 are not implemented and not yet authorized. Volume 4.6 remains incomplete. Volumes 4.7–4.8 ETL testing and 4.9 verification remain later gates; this checkpoint establishes no independently approved detailed scope for them.
+
+## 2026-11-26 — Volume 4.6 Gate 2 locally accepted; manual Git integration pending
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE2 ROADMAP -->
+
+Gate 1 is integrated through [PR #15](https://github.com/MianArslan09/DataXAi/pull/15) at c70ffd14899ac69792d18d93bb109ca9f46e31f5. Its earlier pending-integration statements remain historical. Gate 2 — Source and Cleanup Correctness — is IMPLEMENTED, TESTED and LOCALLY VERIFIED within its reported scope, and the owner accepts that implementation and its targeted review corrections.
+
+Completed work covers accurate source opening/parsing failures, safe diagnostics, primary-error-preserving cleanup and snapshot verification only after successful cleanup. The two independent source-review findings were corrected: generic ETLError wrapping now preserves recognized database classification through restricted trusted causes, and adapter diagnostics omit source paths/worksheet/table names while retaining internal metadata and lineage. No new exception hierarchy, migrations, lifecycle states, retry orchestration, APIs or CI changes were added.
+
+Separate prior evidence: original focused run 83 passed; original selected regression run 239 passed and one POSIX directory-fsync skip on Windows; final correction/affected-compatibility run 160 passed with zero failures/skips. These overlapping counts must not be combined, and the original regression run is not post-correction verification. Targeted Ruff, Black, isort and whitespace checks passed. No tests were rerun for this documentation update. See the [dated project-state checkpoint](PROJECT_STATE.md#2026-11-26--volume-46-gate-2-local-owner-acceptance-and-manual-integration-handoff) for implementation, review provenance and limitations.
+
+Native POSIX durability, the full allowed parser-version matrix and new live PostgreSQL/full-backend/Docker/UCI verification are not established by Gate 2's focused checks. Original exception chains remain potentially sensitive; recovery guidance never authorizes retries. All previously accepted source, staging, lineage and completion contracts remain in force.
+
+Gate 2 remains uncommitted on codex/etl-4.6-gate2 in D:\dataxai-etl-4.6-gate2. Automated Git integration authorization is withdrawn; the owner will manually perform Git integration and review CI. Gate 2 is not merged and its CI verification is pending. Gate 3 is not implemented or authorized. Volume 4.6 remains incomplete; 4.7–4.8 testing and 4.9 verification remain separately gated without newly approved detailed scopes.
