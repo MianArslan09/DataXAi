@@ -1703,3 +1703,40 @@ PR #13 integrated React 19, TypeScript, Vite and frontend CI. Eight thesis views
 The November 16 Stage 1 record preserves the initial formatting failure. Follow-up verification records its correction, successful type checking and production builds, and 29 passing Playwright tests. Historical screenshots and Stage 5 capture instructions exist. Complete Stage 5 capture and production deployment remain unverified.
 
 Owner decision (2026-11-25): Volume 4.5.3b is FORMALLY ACCEPTED for bound CSV/Excel completion, recovery and persisted-receipt verification. Native Linux directory durability and production parser-account isolation remain NOT VERIFIED; PostgreSQL-source completion remains DEFERRED. These limitations are not represented as passed checks. Documentation commit and main integration remain pending. Volume 4.6 remains unauthorized.
+
+## 2026-11-26 — Volume 4.6 Gate 1: Verification and authorized Git integration
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE1 STATE -->
+
+**IMPLEMENTED — TESTED — LOCALLY VERIFIED** for the focused Gate 1 scope, based on the prior Codex execution evidence below. The owner reviewed the independent source assessment, which reported no blocking defects, and authorized Git integration including a merge commit only after all specified PR checks pass. This records the owner's actual approval and integration authorization; it does not assert a separate formal milestone acceptance or independent test execution.
+
+### Baseline and implementation
+
+Read-only GitHub verification during this integration task confirms main at `642d10fe1867375220db2b585a559f7d3e41a7e7`, the completed PR #14 merge for Volume 4.5.3b. This supersedes the November 25 statements that its main integration was pending. The accepted 4.5.3b scope and historical Windows/PostgreSQL/UCI evidence remain unchanged.
+
+Gate 1 technical commit: `29eb0a38496558b3de564e745563fc5ef0336d79`, on `codex/etl-4.6-gate1` in the isolated `D:\dataxai-etl-4.6-gate1` worktree. Only these Python files were added:
+
+- `apps/etl/error_handling.py`
+- `apps/etl/tests/test_error_handling.py`
+
+`classify_etl_failure()` provides an immutable safe descriptor containing an existing error code, controlled category, catalog message, recovery guidance and controlled reason, with an independent string-valued `as_dict()` projection. It reuses existing ETLError classes and preserves their constructors, messages and public behavior. Classification is deterministic and performs no database operations, filesystem access, logging or retries.
+
+Categories cover input, configuration, source I/O, database, integrity, conflict, interruption and unclassified failures. Recovery guidance is limited to `no_unchanged_retry`, `operator_review` and `reconcile_first`. A small explicit psycopg SQLSTATE allowlist, through bounded recognized Django/SQLAlchemy wrappers, distinguishes connection interruption, transaction conflict and database configuration failures. Unknown exceptions and ambiguous snapshot, registration or claim failures remain conservative; exception text is never used to infer recovery.
+
+Classifier-produced descriptors contain catalog text rather than raw exception messages, credentials, paths, source values, SQL or tracebacks. Original exceptions can still contain sensitive data. Only classifier-produced values carry this safety contract; arbitrary caller-constructed descriptors do not.
+
+### Recorded verification and review
+
+Prior Codex-reported focused execution: **101 passed, zero failures or skips** (97 new classification cases plus four existing Django exception-handler compatibility tests). Prior Ruff, Black, isort and Git whitespace checks passed. Coverage includes existing constructors/codes, redaction, unknown exceptions, bounded driver classification, immutable/detached output, conservative recovery and absence of operational side effects.
+
+The owner reports an independent source assessment with no blocking defects. That assessment is source-review evidence, not independent test execution. Integration preflight confirmed both Python files exactly match the reviewed Git blob hashes; staged whitespace and diff review passed. No tests were rerun for this integration/documentation checkpoint. No local full-backend, PostgreSQL integration, Docker or UCI verification is claimed for Gate 1.
+
+### Boundaries and remaining decisions
+
+No persistence, migrations, new models, status transitions, retry orchestration, Celery/Redis workflow, logging framework, coordinator instrumentation, frontend API or CI modification is introduced. The classifier is not yet wired into services or API responses. Recovery guidance does not authorize an operation, prove rollback or commit outcome, revive a terminal FAILED attempt, or bypass source verification, identity, claim fencing or receipt checks.
+
+Preserve immutable bound snapshots, SER-v1, ingestion/batch identity, ordered manifests and lineage, verified replay, PostgreSQL transactions, SQL NULL outcome payloads, claim generations, explicit recovery, atomic proof sealing and evidence-backed COMPLETE transitions. SAFE remains source/date interpretation, not business validation.
+
+At preparation of this checkpoint, the separate documentation commit, feature-branch push, Gate 1 PR, GitHub CI and conditional merge are pending. The owner authorized that sequence with exactly these two Python files and the three checkpoint documents; merge requires the expected two commits, five-file scope, unchanged reviewed head/base, no conflicts and successful lint, backend pytest and Docker-build CI. Preserve existing worktrees, unrelated changes and external evidence; do not delete branches or worktrees.
+
+**Gate 2 — Source and Cleanup Correctness — and Gate 3 are not implemented and not yet authorized.** Volume 4.6 as a whole remains incomplete. Further implementation and later verification milestones require separate owner decisions.
