@@ -208,3 +208,17 @@ This checkpoint supersedes earlier integration and development-gate summaries. P
 Volume 4.5.3b is implemented in local commit `2c0df0c`, independently reviewed and Windows/PostgreSQL/UCI verified per the [project state](docs/PROJECT_STATE.md). Formal owner acceptance was granted on 2026-11-25 for the verified bound CSV/Excel scope with documented limitations; main integration remains pending. Preserve snapshot custody, parser binding, ordered lineage, SER-v1, SQL NULL outcomes, fenced retries and atomic receipt sealing. COMPLETE covers bound extraction, staging and interpretation. Keep downstream business services separately gated.
 
 Use separate technical and documentation/acceptance commits. The existing technical commit already includes the original operating guide. Preserve history and review guide amendments with the documentation changes. Keep the index, unrelated work, separate frontend worktree, archives and external evidence intact. Obtain owner authorization for each Git action and before any Volume 4.6 work.
+
+## 2026-11-26 — Current gate: Volume 4.6 Gate 1 Git integration authorized
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE1 AGENTS -->
+
+This dated checkpoint supersedes earlier current-status summaries without rewriting history. Volume 4.5.3b is merged through PR #14 at `642d10fe1867375220db2b585a559f7d3e41a7e7`; preserve its accepted scope and limitations.
+
+Gate 1 is IMPLEMENTED, TESTED and LOCALLY VERIFIED for its focused scope in technical commit `29eb0a38496558b3de564e745563fc5ef0336d79`. It adds only `apps/etl/error_handling.py` and `apps/etl/tests/test_error_handling.py`: a pure classifier with safe catalog descriptors, existing error codes and conservative recovery guidance. Existing exceptions and service behavior remain unchanged. No persistence, migration, state transition, orchestration, logging framework or API is introduced. Recovery advice is not authorization, and original exceptions remain potentially sensitive.
+
+Prior Codex evidence records 101 focused tests passed with zero failures/skips and passing Ruff, Black, isort and whitespace checks. The owner reviewed an independent source assessment reporting no blocking defects and authorized technical/documentation commits, push, PR and a merge commit only after the specified checks pass. This does not create a separate formal acceptance statement or claim independent test execution. See [PROJECT_STATE.md](docs/PROJECT_STATE.md) for detailed provenance and limitations. No tests were rerun for this checkpoint; PR/CI/merge remain pending at preparation.
+
+Integration is restricted to the two Python files plus `docs/PROJECT_STATE.md`, `docs/PROJECT_ROADMAP.md` and `AGENTS.md`, with separate technical and documentation commits. Stop on unexpected changes, baseline movement, conflicts or failed CI; do not change implementation without authorization. Preserve original/backend/frontend/review worktrees, unrelated files, archives and datasets; do not delete branches or worktrees.
+
+Gate 2 (Source and Cleanup Correctness) and Gate 3 are not implemented and not yet authorized. Stop after Gate 1 Git integration. Keep later milestones separately gated and preserve snapshot custody, SER-v1, lineage, SQL NULL outcomes, fencing, explicit recovery and atomic evidence-backed completion. SAFE is interpretation, not business validation.

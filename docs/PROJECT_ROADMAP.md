@@ -237,3 +237,15 @@ This checkpoint supersedes older planning-only status statements without deletin
 Volume 4.5.3a is integrated through PR #12. React and frontend CI are integrated through PR #13. The active 4.5.3b technical commit is `2c0df0c`. Bound CSV/Excel completion, recovery and receipt acknowledgment are implemented and technically verified on Windows with PostgreSQL and UCI. The owner formally accepted the verified bound CSV/Excel scope on 2026-11-25 with the documented limitations; integration into main remains pending. Native Linux durability and production parser-account isolation remain open. See the [November 25 project-state checkpoint](PROJECT_STATE.md#2026-11-25--volume-453b-evidence-gated-ingestion-completion).
 
 The next action is the separate documentation commit and a reviewed pull request against main. Volume 4.6 (error handling) remains unauthorized. Business validation, healing, warehouse publication and predictive services remain separate roadmap work.
+
+## 2026-11-26 — Volume 4.6 Gate 1 integration checkpoint
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE1 ROADMAP -->
+
+Volume 4.5.3b is integrated through PR #14 at `642d10fe1867375220db2b585a559f7d3e41a7e7`; the earlier pending-integration statement is historical. Its accepted bound CSV/Excel completion guarantees and limitations remain in force.
+
+Volume 4.6 Gate 1 is IMPLEMENTED, TESTED and LOCALLY VERIFIED within its focused scope: a pure safe-diagnostic classifier in `apps/etl/error_handling.py` and focused tests in `apps/etl/tests/test_error_handling.py`, technical commit `29eb0a38496558b3de564e745563fc5ef0336d79`. Prior Codex evidence records 101 passing focused tests, zero failures/skips, and passing Ruff, Black, isort and whitespace checks. The owner reports an independent source assessment with no blocking defects and authorizes Git integration, including a merge commit conditional on all specified PR checks passing. No separate formal acceptance or independent test execution is inferred.
+
+Safe catalog descriptors and conservative recovery guidance preserve existing exception behavior. No persistence, migration, state transition, retry orchestration, service instrumentation or frontend API is added. Diagnostics do not establish retry eligibility or committed state. See the [dated project-state record](PROJECT_STATE.md#2026-11-26--volume-46-gate-1-verification-and-authorized-git-integration) for evidence, limitations and the integration conditions. Tests were not rerun for this checkpoint; PR, CI and merge remain pending at its preparation.
+
+Gate 2 (Source and Cleanup Correctness) and Gate 3 are not implemented and not yet authorized. Volume 4.6 remains incomplete. Volumes 4.7–4.8 ETL testing and 4.9 verification remain later gates; this checkpoint establishes no independently approved detailed scope for them.
