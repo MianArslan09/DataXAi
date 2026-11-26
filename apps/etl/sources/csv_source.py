@@ -10,6 +10,7 @@ from typing import Iterator, Union
 import pandas as pd
 
 from etl.exceptions import MalformedSourceError, MissingColumnsError, SourceNotFoundError
+from etl.sources._cleanup import close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
 
 logger = logging.getLogger(__name__)
@@ -25,20 +26,23 @@ class CsvSource:
         self._reader = None
 
     def __enter__(self) -> "CsvSource":
-        if not self.path.exists():
-            raise SourceNotFoundError(f"CSV file not found: {self.path}")
         return self._open(self.path)
 
     def _open(self, stream_or_path) -> "CsvSource":
-        self._reader = pd.read_csv(
-            stream_or_path, chunksize=self.batch_size, encoding=self.encoding
-        )
+        try:
+            self._reader = pd.read_csv(
+                stream_or_path, chunksize=self.batch_size, encoding=self.encoding
+            )
+        except FileNotFoundError as exc:
+            raise SourceNotFoundError() from exc
+        except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+            raise MalformedSourceError("Could not parse CSV source.") from exc
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        if self._reader is not None:
-            self._reader.close()
-            self._reader = None
+        reader, self._reader = self._reader, None
+        if reader is not None:
+            close_resources(reader.close, primary_error=exc_val)
 
     def extract(self) -> Iterator[SourceBatch]:
         if self._reader is None:
@@ -50,18 +54,14 @@ class CsvSource:
             for chunk in self._reader:
                 missing = set(CANONICAL_COLUMNS) - set(chunk.columns)
                 if missing:
-                    raise MissingColumnsError(f"{self.path} is missing columns: {sorted(missing)}")
+                    raise MissingColumnsError(f"CSV source is missing columns: {sorted(missing)}")
                 logger.info(
                     "csv_source.batch",
-                    extra={"path": str(self.path), "batch": batch_number, "rows": len(chunk)},
+                    extra={"batch": batch_number, "rows": len(chunk)},
                 )
                 yield SourceBatch(
                     data=chunk, source_name=f"csv:{self.path.name}", batch_number=batch_number
                 )
                 batch_number += 1
-        except pd.errors.ParserError as exc:
-            raise MalformedSourceError(f"Could not parse CSV {self.path}: {exc}") from exc
-        except UnicodeDecodeError as exc:
-            raise MalformedSourceError(
-                f"Could not decode CSV {self.path} as {self.encoding}: {exc}"
-            ) from exc
+        except (pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+            raise MalformedSourceError("Could not parse CSV source.") from exc

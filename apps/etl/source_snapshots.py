@@ -19,7 +19,7 @@ import re
 import stat
 import tempfile
 from collections.abc import Iterator, Sequence
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from time import perf_counter
@@ -28,6 +28,7 @@ from uuid import uuid4
 from django.conf import settings
 
 from etl.exceptions import ETLError, MalformedSourceError, MissingColumnsError
+from etl.sources._cleanup import cleanup_on_exit, close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
 from etl.sources.csv_source import CsvSource
 from etl.sources.excel_source import ExcelSource
@@ -195,10 +196,11 @@ def _windows_fd(path, *, create_new):
         return msvcrt.open_osfhandle(
             handle, (os.O_WRONLY if create_new else os.O_RDONLY) | os.O_BINARY
         )
-    except BaseException:
-        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))
+    except BaseException as exc:
+        callbacks = [lambda: ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))]
         if create_new:
-            path.unlink()
+            callbacks.append(path.unlink)
+        close_resources(*callbacks, primary_error=exc)
         raise
 
 
@@ -331,6 +333,14 @@ def _check_identity(stream, snapshot, csv_encoding=None):
     return count
 
 
+def _fdopen(fd, mode):
+    try:
+        return os.fdopen(fd, mode)
+    except BaseException as exc:
+        close_resources(lambda: os.close(fd), primary_error=exc)
+        raise
+
+
 def _open_object(root, publisher, snapshot):
     path = root / snapshot.sha256
     info = _object_custody(path, publisher)
@@ -338,10 +348,13 @@ def _open_object(root, publisher, snapshot):
         fd = _windows_fd(path, create_new=False)
     else:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    stream = os.fdopen(fd, "rb")
-    if not info.st_ino or not os.path.samestat(info, os.fstat(stream.fileno())):
-        stream.close()
-        raise SnapshotError("Snapshot object changed during opening.")
+    stream = _fdopen(fd, "rb")
+    try:
+        if not info.st_ino or not os.path.samestat(info, os.fstat(stream.fileno())):
+            raise SnapshotError("Snapshot object changed during opening.")
+    except BaseException as exc:
+        close_resources(stream.close, primary_error=exc)
+        raise
     return stream
 
 
@@ -357,14 +370,16 @@ def capture_snapshot(path: Path | str) -> SourceSnapshot:
         info = _check_path(path)
         if not stat.S_ISREG(info.st_mode):
             raise SnapshotError("Snapshot input must be a regular file.")
-        with path.open("rb") as source:
+        source = path.open("rb")
+        with cleanup_on_exit(source.close):
             if not os.path.samestat(info, os.fstat(source.fileno())):
                 raise SnapshotError("Snapshot input changed during opening.")
             fd, temporary = _private_temp(root)
-            try:
+            with cleanup_on_exit(temporary.unlink):
                 digest = hashlib.sha256()
                 length = 0
-                with os.fdopen(fd, "wb") as target:
+                target = _fdopen(fd, "wb")
+                with cleanup_on_exit(target.close):
                     while block := source.read(_CHUNK):
                         target.write(block)
                         digest.update(block)
@@ -384,10 +399,9 @@ def capture_snapshot(path: Path | str) -> SourceSnapshot:
                 try:
                     os.link(temporary, root / snapshot.sha256)
                 except FileExistsError:
-                    with _open_object(root, publisher, snapshot) as existing:
+                    existing = _open_object(root, publisher, snapshot)
+                    with cleanup_on_exit(existing.close):
                         _check_identity(existing, snapshot)
-            finally:
-                temporary.unlink()
             if os.name == "posix":
                 _sync_published_directory(root)
             return snapshot
@@ -399,10 +413,8 @@ def _sync_published_directory(root):
     # Include both the published link and temporary unlink, also on verified reuse.
     try:
         fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
+        with cleanup_on_exit(lambda: os.close(fd)):
             os.fsync(fd)
-        finally:
-            os.close(fd)
     except OSError:
         raise SnapshotError(
             "Snapshot directory sync failed; publication durability is unconfirmed."
@@ -458,8 +470,8 @@ class SnapshotTraversal:
                 yield batch
         except MissingColumnsError:
             raise MissingColumnsError("Selected source is missing required columns.") from None
-        except Exception:
-            # Parser diagnostics may contain original cell values, paths or XML.
+        except MalformedSourceError:
+            # Only known malformed-source failures receive this safe projection.
             raise MalformedSourceError(
                 "Invalid snapshot data encountered during parsing."
             ) from None
@@ -496,16 +508,16 @@ def _traverse(snapshot, source, csv_encoding=None):
         stream = _open_object(root, publisher, snapshot)
     except OSError:
         raise SnapshotError("Snapshot object is unavailable.") from None
-    with stream:
+    with cleanup_on_exit(stream.close):
         started = perf_counter()
         expected_rows = _check_identity(stream, snapshot, csv_encoding)
         precheck_seconds = perf_counter() - started
         visits = _SheetVisits()
         with ExitStack() as parsers:
-            parsers.callback(source.__exit__, None, None, None)
+            parsers.enter_context(cleanup_on_exit(lambda: source.__exit__(None, None, None)))
             try:
                 source._open(stream)
-            except Exception:
+            except MalformedSourceError:
                 raise MalformedSourceError("Could not open selected snapshot source.") from None
             if isinstance(source, ExcelSource):
                 sheets = tuple(source.sheet_names)
@@ -515,11 +527,11 @@ def _traverse(snapshot, source, csv_encoding=None):
             else:
                 sheets = ()
                 batches = source.extract()
-            parsers.enter_context(closing(batches))
+            parsers.enter_context(cleanup_on_exit(batches.close))
             traversal = SnapshotTraversal(batches, visits, sheets, expected_rows)
             traversal.precheck_seconds = precheck_seconds
             traversal.postcheck_seconds = None
-            parsers.enter_context(closing(iter(traversal)))
+            parsers.enter_context(cleanup_on_exit(iter(traversal).close))
             yield traversal
         if traversal._exhausted:
             if stream.closed:
@@ -533,8 +545,10 @@ def _traverse(snapshot, source, csv_encoding=None):
                 raise SnapshotError("Snapshot object is unavailable.") from None
             if not os.path.samestat(current, os.fstat(stream.fileno())):
                 raise SnapshotError("Snapshot object changed during traversal.")
-            traversal._verified = True
             traversal.postcheck_seconds = perf_counter() - started
+    # A close-only failure must not leave a successful traversal attestation.
+    if traversal._exhausted:
+        traversal._verified = True
 
 
 def open_snapshot_csv(
