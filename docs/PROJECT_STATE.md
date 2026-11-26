@@ -1740,3 +1740,63 @@ Preserve immutable bound snapshots, SER-v1, ingestion/batch identity, ordered ma
 At preparation of this checkpoint, the separate documentation commit, feature-branch push, Gate 1 PR, GitHub CI and conditional merge are pending. The owner authorized that sequence with exactly these two Python files and the three checkpoint documents; merge requires the expected two commits, five-file scope, unchanged reviewed head/base, no conflicts and successful lint, backend pytest and Docker-build CI. Preserve existing worktrees, unrelated changes and external evidence; do not delete branches or worktrees.
 
 **Gate 2 — Source and Cleanup Correctness — and Gate 3 are not implemented and not yet authorized.** Volume 4.6 as a whole remains incomplete. Further implementation and later verification milestones require separate owner decisions.
+
+## 2026-11-26 — Volume 4.6 Gate 2: Local owner acceptance and manual integration handoff
+
+<!-- DATAXAI CHECKPOINT 2026-11-26 V4.6 GATE2 STATE -->
+
+**IMPLEMENTED — TESTED — LOCALLY VERIFIED within the reported Gate 2 scope.** The owner accepts the Gate 2 implementation and targeted review corrections within that locally verified scope. Git integration and CI verification remain pending and will be performed manually by the owner. This checkpoint supersedes earlier current-status statements without rewriting historical evidence.
+
+### Baseline and completed scope
+
+Gate 1 was integrated through [PR #15](https://github.com/MianArslan09/DataXAi/pull/15) using merge commit c70ffd14899ac69792d18d93bb109ca9f46e31f5. Its technical commit 29eb0a38496558b3de564e745563fc5ef0336d79 and documentation commit 59b8f675737a60a291a9fbe3094fa8782c9a81d4 are preserved. Prior GitHub CI passed lint, backend pytest (1,352 passed, 42 historical-checkout skips) and Docker build. This is Gate 1 evidence, not Gate 2 CI verification. PR #14's accepted 4.5.3b merge remains part of the baseline.
+
+Gate 2 — Source and Cleanup Correctness — fixes demonstrated source-opening, parsing and cleanup weaknesses while preserving accepted ETL data and completion contracts. Worktree: D:\dataxai-etl-4.6-gate2; branch: codex/etl-4.6-gate2; HEAD: c70ffd14899ac69792d18d93bb109ca9f46e31f5. The nine technical files remain uncommitted:
+
+- apps/etl/sources/csv_source.py
+- apps/etl/sources/excel_source.py
+- apps/etl/sources/postgres_source.py
+- apps/etl/source_snapshots.py
+- apps/etl/sources/_cleanup.py
+- apps/etl/error_handling.py
+- apps/etl/tests/test_source_failures.py
+- apps/etl/tests/test_snapshot_failures.py
+- apps/etl/tests/test_error_handling.py
+
+CSV opening and iteration consistently translate known pandas parser failures into safe MalformedSourceError messages; native decoding and other I/O failures remain distinguishable. Excel narrows parser-error translation, preserves unexpected programming/infrastructure exceptions, owns the path-opened input handle, closes row iterators and retains supported extension checks and parser options. PostgreSQL separates connection failures from query/configuration failures, uses Gate 1 catalog messages instead of raw SQLAlchemy text, and retains acquired resources for cleanup when opening/configuration fails.
+
+The small private cleanup helper attempts every registered cleanup, preserves an active primary failure and propagates the first cleanup-only failure. GeneratorExit is treated as a close request so explicit generator-close failures remain visible. Adapter references are cleared as cleanup begins; this does not assert that a resource physically closed when its close operation failed. Snapshot descriptor ownership, temporary-file cleanup and traversal cleanup follow that policy. Failure cleanup never deletes a published snapshot. verified_exhausted becomes true only after traversal, content/custody checks and final cleanup succeed. Existing completion code is unchanged; a database-free fault-injection test verifies that cleanup failure prevents sealing even after all fixture batches are processed.
+
+### Independent source review and final corrections
+
+The owner reports a substantially positive independent source review of the initial seven Gate 2 files, accepting the cleanup and source/snapshot direction in principle and raising two findings:
+
+1. Generic ETLError wrapping discarded the database category, reason and recovery guidance. The classifier now recognizes only an exact ETLError with a recognized database exception as its direct cause, then reuses the existing bounded database classification. Authentication failures, missing tables and insufficient permissions retain configuration classification; serialization failures retain transaction-conflict classification and reconcile_first guidance. Existing error codes, constructors, safe catalog messages and SQLSTATE allowlists are preserved. Unknown causes, implicit context, nested generic wrappers and unknown/specialized domain subclasses do not gain unrestricted cause traversal.
+2. Adapter log extras and missing-column messages unnecessarily included source paths, worksheet names and table names. These diagnostic identifiers were removed while retaining batch/row counts and safe canonical missing-column names. SourceBatch contents, actual source metadata, parser configuration, provenance, lineage and snapshot evidence are unchanged.
+
+Source review is not independent test execution. The owner subsequently accepted the reported implementation and these locally verified corrections. No new exception hierarchy, persistence, migration, state transition, retry orchestration, logging infrastructure, frontend API or CI configuration was introduced.
+
+### Separate recorded verification runs
+
+| Prior Codex execution | Actual result and scope |
+| --- | --- |
+| Original focused Gate 2 tests | 83 passed, zero failures/skips; deterministic source and cleanup fault injection |
+| Original selected regression run, before final review corrections | 239 passed, 1 skipped; included focused Gate 2 tests, relevant CSV/Excel/snapshot regressions and Gate 1/handler compatibility |
+| Final correction and affected-compatibility run | 160 passed, zero failures/skips; classifier/wrapper preservation, diagnostic redaction, iterator compatibility, CSV/Excel and exception-handler checks |
+| Targeted quality checks | Ruff, Black, isort and Git whitespace checks passed at the original and final correction checkpoints |
+
+These test sets overlap. Do not sum them into a combined test count. The 239-pass run was not repeated after the final corrections. Its single skip was the existing POSIX directory-fsync test on Windows. No tests or benchmarks were run for this documentation task.
+
+### Limitations and preserved guarantees
+
+Iterator checks covered installed openpyxl 3.1.5 read-only worksheet iterators, including empty sheets, and pandas 2.3.3 CSV/SQL chunk iterators. These support close(); no actual iterator incompatibility was demonstrated, so cleanup was not expanded during the review corrections. The full allowed dependency-version range was not tested.
+
+Native POSIX directory durability remains NOT VERIFIED in this Windows work. PostgreSQL failures and completion persistence boundaries were tested with fakes; no new live PostgreSQL verification is claimed. Full backend regression, Docker builds, UCI experiments and broad performance testing were not run for Gate 2. Original exception chains/native exceptions may contain sensitive information; safe catalog projections and sanitized adapter diagnostics are the intended disclosure boundary. Unknown failures remain conservative. Secondary cleanup failures are suppressed when preserving a primary failure, without additional logging infrastructure; failed temporary unlink may leave an owned temporary file for operator attention.
+
+Immutable snapshot custody, SER-v1, original ingestion/batch identities, source metadata, ordered manifests and positional lineage, replay, SQL NULL outcome payloads, claim fencing, explicit recovery and atomic evidence-backed completion remain unchanged. SAFE remains interpretation, not business validation. Recovery guidance does not authorize retries or prove transaction outcome. Production parser-account isolation and PostgreSQL-source completion retain their previously documented limitations/deferred scope.
+
+### Owner-controlled next steps
+
+Automated Git integration authorization is withdrawn. Gate 2 is locally accepted, not committed or merged; manual staging, commits, push, PR review/merge and GitHub CI verification are pending with the owner. Codex performed no Gate 2 staging, commit, push, PR creation or merge. Prior authorized Gate 1 integration is preserved and has not been reversed. The current documentation-only authorization covers AGENTS.md, this file and PROJECT_ROADMAP.md; it authorizes no technical changes, Git writes, tests, other-worktree changes or Excel tracker updates.
+
+Gate 3 is not implemented or authorized. Volume 4.6 remains incomplete. Volumes 4.7–4.8 ETL testing and 4.9 verification remain later owner-gated work; no detailed new scope is approved by this checkpoint.

@@ -228,6 +228,10 @@ def classify_etl_failure(exc: BaseException) -> ETLFailure:
         raise TypeError("Expected an exception instance.")
     if isinstance(exc, SourceConnectionError):
         return _database_failure(exc.__cause__, SourceConnectionError.code)
+    # Only the generic domain wrapper around a recognized database cause is
+    # transparent. Specialized/unknown domain subclasses keep their own policy.
+    if type(exc) is ETLError and isinstance(exc.__cause__, _DATABASE_ERRORS):
+        return _database_failure(exc.__cause__, ETLError.code)
     for error_type, failure in _DOMAIN_FAILURES:
         if isinstance(exc, error_type):
             return failure

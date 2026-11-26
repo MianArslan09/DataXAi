@@ -13,17 +13,27 @@ drop half the real dataset.
 """
 
 import logging
-from contextlib import closing
 from pathlib import Path
 from typing import Iterator, Optional, Sequence, Union
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 import openpyxl
 import pandas as pd
+from openpyxl.reader.excel import SUPPORTED_FORMATS
+from openpyxl.utils.exceptions import InvalidFileException
 
 from etl.exceptions import MalformedSourceError, MissingColumnsError, SourceNotFoundError
+from etl.sources._cleanup import cleanup_on_exit, close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
 
 logger = logging.getLogger(__name__)
+
+_PARSER_ERRORS = (InvalidFileException, BadZipFile, ParseError)
+if openpyxl.LXML:
+    from lxml.etree import XMLSyntaxError
+
+    _PARSER_ERRORS += (XMLSyntaxError,)
 
 
 class ExcelSource:
@@ -42,40 +52,53 @@ class ExcelSource:
         self.sheet_names: list = []
         self.batch_size = batch_size
         self._workbook = None
+        self._stream = None
 
     def __enter__(self) -> "ExcelSource":
-        if not self.path.exists():
-            raise SourceNotFoundError(f"Excel workbook not found: {self.path}")
-        return self._open(self.path)
+        # Own the input handle even when openpyxl fails before returning a workbook.
+        try:
+            self._stream = self.path.open("rb")
+        except FileNotFoundError as exc:
+            raise SourceNotFoundError() from exc
+        try:
+            if self.path.suffix.lower() not in SUPPORTED_FORMATS:
+                raise MalformedSourceError("Unsupported workbook format.")
+            return self._open(self._stream)
+        except BaseException as exc:
+            self.__exit__(type(exc), exc, exc.__traceback__)
+            raise
 
     def _open(self, stream_or_path) -> "ExcelSource":
         try:
             self._workbook = openpyxl.load_workbook(stream_or_path, read_only=True, data_only=True)
-        except Exception as exc:
-            # openpyxl raises several distinct exception types for corrupt/non-xlsx files
-            raise MalformedSourceError(f"Could not open workbook {self.path}: {exc}") from exc
-
-        available = self._workbook.sheetnames
-        requested = self._requested_sheets or available
-        unknown = set(requested) - set(available)
-        if unknown:
-            self._workbook.close()
-            self._workbook = None
-            raise MalformedSourceError(
-                f"Unknown sheet(s) {sorted(unknown)} in {self.path}; available sheets: {available}"
-            )
-        self.sheet_names = requested
+            available = self._workbook.sheetnames
+            requested = self._requested_sheets or available
+            if set(requested) - set(available):
+                raise MalformedSourceError("Selected worksheet is unavailable.")
+            self.sheet_names = requested
+        except BaseException as exc:
+            self.__exit__(type(exc), exc, exc.__traceback__)
+            if isinstance(exc, _PARSER_ERRORS):
+                raise MalformedSourceError("Could not parse Excel source.") from exc
+            raise
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        if self._workbook is not None:
-            self._workbook.close()
-            self._workbook = None
+        workbook, self._workbook = self._workbook, None
+        stream, self._stream = self._stream, None
+        callbacks = [resource.close for resource in (workbook, stream) if resource is not None]
+        close_resources(*callbacks, primary_error=exc_val)
 
     def extract(self) -> Iterator[SourceBatch]:
         yield from self._extract()
 
     def _extract(self, visits=None) -> Iterator[SourceBatch]:
+        try:
+            yield from self._extract_batches(visits)
+        except _PARSER_ERRORS as exc:
+            raise MalformedSourceError("Could not parse Excel source.") from exc
+
+    def _extract_batches(self, visits=None) -> Iterator[SourceBatch]:
         if self._workbook is None:
             raise RuntimeError(
                 "ExcelSource must be used as a context manager: `with ExcelSource(...) as s:`"
@@ -90,16 +113,13 @@ class ExcelSource:
             else:
                 visits.entered.append(sheet_name)
                 rows_iter = self._bound_rows(worksheet)
-            try:
+            with cleanup_on_exit(rows_iter.close):
                 try:
                     header = list(next(rows_iter))
                 except StopIteration:
                     if visits is not None:
                         raise MalformedSourceError("Selected worksheet has no header.") from None
-                    logger.warning(
-                        "excel_source.empty_sheet",
-                        extra={"path": str(self.path), "sheet": sheet_name},
-                    )
+                    logger.warning("excel_source.empty_sheet")
                     continue
 
                 missing = set(CANONICAL_COLUMNS) - set(header)
@@ -111,9 +131,7 @@ class ExcelSource:
                 ):
                     raise MalformedSourceError("Invalid selected worksheet header.")
                 if missing:
-                    raise MissingColumnsError(
-                        f"{self.path} sheet '{sheet_name}' is missing columns: {sorted(missing)}"
-                    )
+                    raise MissingColumnsError(f"Excel source is missing columns: {sorted(missing)}")
 
                 buffer = []
                 for row in rows_iter:
@@ -129,9 +147,6 @@ class ExcelSource:
                         sheet_rows += len(buffer)
                     yield self._make_batch(header, buffer, sheet_name, batch_number)
                     batch_number += 1
-            finally:
-                if visits is not None:
-                    rows_iter.close()
             if visits is not None:
                 visits.completed.append(sheet_name)
                 visits.counts.append((sheet_rows, batch_number - first_batch))
@@ -151,7 +166,8 @@ class ExcelSource:
             raise MalformedSourceError("Unsupported worksheet dimensions.")
         worksheet.reset_dimensions()
         row_number = 0
-        with closing(worksheet.iter_rows(min_row=1, values_only=True)) as rows:
+        rows = worksheet.iter_rows(min_row=1, values_only=True)
+        with cleanup_on_exit(rows.close):
             for row_number, row in enumerate(rows, start=1):
                 if height is not None and (row_number > height or len(row) > width):
                     raise MalformedSourceError("Worksheet data exceeds declared dimensions.")
@@ -167,8 +183,6 @@ class ExcelSource:
         logger.info(
             "excel_source.batch",
             extra={
-                "path": str(self.path),
-                "sheet": sheet_name,
                 "batch": batch_number,
                 "rows": len(df),
             },

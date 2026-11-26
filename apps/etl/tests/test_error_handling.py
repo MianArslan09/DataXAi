@@ -359,3 +359,94 @@ def test_classification_and_projection_have_no_operational_side_effects(monkeypa
 def test_invalid_classifier_argument_uses_fixed_error_text(value):
     with pytest.raises(TypeError, match="^Expected an exception instance\\.$"):
         classify_etl_failure(value)
+
+
+@pytest.mark.parametrize("wrapper", ["driver", "django", "sqlalchemy"])
+@pytest.mark.parametrize(
+    "state,category,reason,recovery",
+    [
+        ("28P01", C.CONFIGURATION, FailureReason.DATABASE_CONFIGURATION, R.OPERATOR_REVIEW),
+        ("42P01", C.CONFIGURATION, FailureReason.DATABASE_CONFIGURATION, R.OPERATOR_REVIEW),
+        ("42501", C.CONFIGURATION, FailureReason.DATABASE_CONFIGURATION, R.OPERATOR_REVIEW),
+        ("40001", C.DATABASE, FailureReason.TRANSACTION_CONFLICT, R.RECONCILE_FIRST),
+    ],
+)
+def test_generic_etl_wrapper_retains_recognized_database_classification(
+    wrapper, state, category, reason, recovery
+):
+    cause = wrap_database(psycopg.errors.lookup(state)(SECRET), wrapper)
+    exc = ETLError(SECRET)
+    exc.__cause__ = cause
+    exc.code = SECRET
+    before = (exc.args, exc.__cause__, vars(exc).copy())
+
+    failure = classify_etl_failure(exc)
+
+    assert failure == classify_etl_failure(cause)
+    assert failure.code == "etl_error"
+    assert (failure.category, failure.reason, failure.recovery) == (category, reason, recovery)
+    assert (exc.args, exc.__cause__, vars(exc)) == before
+    assert_safe(failure)
+
+
+@pytest.mark.parametrize("kind", ["unknown", "implicit", "nested", "cycle", "subclass"])
+def test_generic_etl_wrapper_does_not_expand_trusted_cause_paths(kind):
+    class Unknown(Exception):
+        @property
+        def sqlstate(self):
+            pytest.fail("Unrecognized exception metadata was inspected")
+
+    class CustomETLError(ETLError):
+        pass
+
+    exc = CustomETLError(SECRET) if kind == "subclass" else ETLError(SECRET)
+    driver = psycopg.errors.SerializationFailure(SECRET)
+    if kind == "unknown":
+        cause = Unknown(SECRET)
+        cause.__cause__ = driver
+        exc.__cause__ = cause
+    elif kind == "implicit":
+        exc.__context__ = driver
+    elif kind == "nested":
+        cause = ETLError(SECRET)
+        cause.__cause__ = driver
+        exc.__cause__ = cause
+    elif kind == "cycle":
+        exc.__cause__ = exc
+    else:
+        exc.__cause__ = driver
+
+    failure = classify_etl_failure(exc)
+    assert failure.category == C.UNCLASSIFIED
+    assert failure.reason == FailureReason.UNSPECIFIED
+    assert failure.recovery == R.OPERATOR_REVIEW
+    assert_safe(failure)
+
+
+@pytest.mark.parametrize("error", [MalformedSourceError, AttemptConflictError, SnapshotError])
+def test_generic_etl_refinement_does_not_override_specialized_domain_policy(error):
+    exc = error(SECRET)
+    expected = classify_etl_failure(exc)
+    exc.__cause__ = psycopg.errors.SerializationFailure(SECRET)
+    assert classify_etl_failure(exc) == expected
+
+
+@pytest.mark.parametrize("kind", ["unknown_state", "cycle", "unrecognized_orig"])
+def test_generic_etl_database_wrapper_retains_conservative_fallback(kind):
+    if kind == "unknown_state":
+        cause = psycopg.OperationalError(SECRET)
+        cause.sqlstate = "99999"
+    elif kind == "cycle":
+        cause = OperationalError(SECRET)
+        cause.__cause__ = cause
+    else:
+        unknown = RuntimeError(SECRET)
+        unknown.__cause__ = psycopg.errors.SerializationFailure(SECRET)
+        cause = SqlOperationalError(SECRET, None, unknown)
+    exc = ETLError(SECRET)
+    exc.__cause__ = cause
+    failure = classify_etl_failure(exc)
+    assert failure.category == C.DATABASE
+    assert failure.reason == FailureReason.UNSPECIFIED
+    assert failure.recovery == R.OPERATOR_REVIEW
+    assert_safe(failure)
