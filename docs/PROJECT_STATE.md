@@ -1926,3 +1926,51 @@ The technical change is confined to those three files. Production services, migr
 Deliberate client-owned interruption verifies the observed commit boundary. Real network partitions and production crash durability remain unverified. Authoritative PostgreSQL source completion remains deferred. SAFE denotes date interpretation only. Business validation remains outside ETL transformation. The recorded duration measures the test selection, not ETL throughput. Existing parser, durability, explicit recovery and best-effort diagnostic limitations continue to apply.
 
 Separate technical and documentation commits, push, PR, candidate CI and merge remain pending. Gate 2 is approved within the Volume 4.7 plan and requires separate owner authorization to implement. Volume 4.7 remains incomplete.
+
+## Volume 4.7 Gate 2 acceptance
+
+**2026-11-27.** The owner formally accepts Gate 2 — Persisted Completion Behavior After CSV and XLSX Parser Cleanup Failure — within its implemented, independently reviewed and locally verified scope. Status is IMPLEMENTED, TESTED, LOCALLY VERIFIED and POSTGRES VERIFIED for the recorded cases. This checkpoint supersedes earlier current-status statements while preserving their chronology.
+
+### Gate 1 integration
+
+Gate 1 is formally merged through PR #18. The reviewer independently confirmed the merge, and local Git history also contains the following commits. Candidate CI passed according to the owner. At the owner's request, CI was not independently reinspected. [PR #18](https://github.com/MianArslan09/DataXAi/pull/18)
+
+| Commit | SHA |
+| --- | --- |
+| Technical | `059f23a7e4530acc5e2d70031db478481c40b7a2` |
+| Documentation | `694a049050e44e1f2497866ec07c2f296428f7b7` |
+| Merge and Gate 2 baseline | `01f58f3a15a0a401d0cc1d9d031b34379e815f02` |
+
+### Gate 2 implementation and accepted guarantees
+
+The sole technical change is `apps/etl/tests/test_coordinator_failures_postgres.py`. The parameterized `test_snapshot_cleanup_failure_preserves_unsealed_execution_and_recovers` covers CSV and XLSX. No production service changes, new ETL functionality, models or migrations were introduced.
+
+- Each case parses a real file from a retained immutable snapshot into exactly two one-row batches, producing one SAFE and one UNRESOLVED outcome. The XLSX case explicitly selects the Orders worksheet. Existing private snapshot-store and UUID-named disposable application PostgreSQL fixtures are reused with local-target and database-creation permission checks. These file-based cases require no upstream PostgreSQL source.
+- Before the synthetic cleanup fault, a separate application PostgreSQL connection confirms both batches, attempts, successful runs and outcomes have committed. The real parser cleanup returns successfully before the test raises its deliberate `OSError`. The original exception object reaches the caller.
+- Natural parser exhaustion is observed, while failed cleanup prevents authoritative `verified_exhausted` attestation. The ingestion remains OPEN with SQL NULL final counts and absent completion timestamp. The receipt remains unsealed with absent counters, manifest, coverage, receipt digest and seal timestamp. Original binding fields, bound timestamp and retained snapshot bytes remain unchanged.
+- Exact persisted-state comparison covers StagingIngestion, IngestionCompletionProof, StagingBatch, StagingRecord, TransformationAttempt, PipelineRun and TransformationRecordResult. The checks reject additional attempts, alternate execution keys, unlinked runs and unintended records, and verify SQL NULL outcome payloads and complete positional membership.
+- Exactly one controlled coordinator observation identifies `complete_bound_ingestion` at `source_cleanup` with the original ingestion and execution identities and the expected `source_io / unspecified / operator_review` classification. Exact structured and rendered representations exclude stale batch/attempt/run fields and sensitive exception content.
+- Explicit retry completes a verified traversal and seals the original execution with two batches, two rows, one SAFE and one UNRESOLVED outcome, the expected manifest and coverage, and matching completion/seal timestamps. Persisted execution identities, timestamps, raw SER-v1 text and positional lineage remain unchanged. Only the authorized ingestion/proof completion fields change.
+- Sealed acknowledgment returns the same receipt and coverage, preserves exact persisted state, prohibits both snapshot-opening paths, and performs no ordinary INSERT, UPDATE or DELETE operations. Existing receipt-locking reads remain permitted. An incompatible parser runtime remains rejected.
+- The owner selection also confirmed compatibility with an application disconnect during sealing and simulated acknowledgment loss after the sealing commit.
+
+### Review and verification provenance
+
+The owner reports that the independent reviewer inspected the complete changed technical file and its diff against the merged baseline, together with relevant production completion, snapshot, adapter cleanup, diagnostic, classifier, staging-reader and disposable PostgreSQL fixture contracts. The reviewer identified no blocking findings. Gate 2 passed source review without an implementation correction cycle. The review was static, with no reviewer-executed tests or database operations.
+
+| Evidence origin | Scope and result |
+| --- | --- |
+| Prior Codex execution | Python compilation, scoped Ruff, Black check, isort check and Git whitespace check passed. Existing database-free CSV and Excel cleanup regressions passed, **2 passed in 4.31 seconds**. |
+| Owner execution, November 27, 2026 | CSV cleanup failure/recovery, XLSX cleanup failure/recovery, application disconnect during sealing, and simulated post-commit sealing acknowledgment loss. **4 passed in 12.24 seconds, zero failures, zero errors and zero skips**. |
+| Owner runtime and restoration | Windows, Python 3.12.10, Django 5.2.17 and pytest 8.4.2. Environment restoration succeeded. After verification, only the authorized technical file remained modified. |
+| Owner-retained artifact | `DataXAi_4.7_Gate2_Postgres_20261127-175724.xml` in the owner's Downloads folder. This is owner-reported evidence. The report is neither repository-tracked nor independently inspected. |
+
+The gate used explicit acceptance boundaries, false-positive prevention, requirement-to-assertion traceability, exact persisted-state comparison and critical self-review before implementation submission. Independent source review preceded the owner's manual database selection. The owner managed baseline fetching and isolated workspace preparation. These practices carry forward proportionately through the existing engineering guardrails.
+
+### Limitations and integration boundary
+
+Parser cleanup failure is deliberately injected and post-commit acknowledgment loss is simulated. Client disconnect verification leaves production network partitions and crash durability unverified. SAFE denotes successful date interpretation, with business validation still outside this scope. Test duration measures the selected verification workload rather than ETL throughput. No full local regression suite was executed. Existing parser compatibility, explicit recovery, best-effort logging and PostgreSQL authoritative-completion limitations remain in force.
+
+Gate 2 candidate CI remains pending. The accepted worktree is `D:\dataxai-etl-4.7-gate2` on `feat/etl-4.7-gate2` at `01f58f3a15a0a401d0cc1d9d031b34379e815f02`. Technical commit, documentation commit, push, PR, CI and merge remain pending. **Volume 4.7 is ready for final integration and remains open until Gate 2 is merged and integration is verified.** Volume 4.8 awaits separate planning and owner authorization.
+
+This acceptance reconciliation permits only AGENTS.md, PROJECT_STATE.md and PROJECT_ROADMAP.md edits plus lightweight documentation checks. The technical file's pre-edit SHA-256 is `19FC81FB9645CD4A36A71E394AE89DBA275CF224FD8C4220901FB8F02293D3CB`, recorded for comparison after documentation edits. This documentation task performs no test, database, benchmark or Docker execution and authorizes no Git writes or tracker updates.
