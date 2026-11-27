@@ -57,6 +57,7 @@ jobs:
           --health-retries 5
     env:
       DJANGO_SETTINGS_MODULE: config.settings.test
+      DATAXAI_REQUIRE_SOURCE_POSTGRES: "1"
       TEST_SOURCE_DATABASE_URL: postgresql+psycopg://dataxai_source:dataxai_source@localhost:5433/dataxai_source
     steps:
       - uses: actions/checkout@v4
