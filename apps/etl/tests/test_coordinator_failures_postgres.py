@@ -5,19 +5,30 @@ shared session. Post-commit InterruptedError is SIMULATED acknowledgment loss;
 it is not evidence of a real network failure, server crash or crash durability.
 """
 
+import csv
+import hashlib
+import json
+import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
+from uuid import uuid4
 
+import psycopg
 import pytest
+from decouple import config
 from django.db import DatabaseError, InterfaceError, connections
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from etl import ingestion_completion as completion
 from etl import pipeline_runs as pipeline
-from etl.exceptions import AttemptConflictError
+from etl.exceptions import AttemptConflictError, StagingIntegrityError
 from etl.models import (
+    IngestionCompletionProof,
     PipelineRun,
     StagingBatch,
     StagingIngestion,
@@ -25,14 +36,48 @@ from etl.models import (
     TransformationAttempt,
     TransformationRecordResult,
 )
+from etl.sources import CANONICAL_COLUMNS, CsvSource, ExcelSource
+from etl.staging_reader import load_source_batch
 from etl.tests.test_ingestion_completion import binding as binding
 from etl.tests.test_ingestion_completion import complete
 from etl.tests.test_pipeline_runs import args as args
 from etl.tests.test_source_snapshots import store as store
-from etl.tests.test_staging_constraints import staging_postgres as staging_postgres
+from etl.tests.test_source_snapshots import workbook
+from etl.tests.test_staging_constraints import staging_postgres as disposable_postgres  # noqa: F401
 from etl.tests.test_staging_persistence import application_postgres as application_postgres
 from etl.tests.test_staging_persistence import batch as batch
 from etl.tests.test_staging_persistence import ingestion as ingestion
+from etl.tests.test_staging_reader import _raw_snapshot
+from etl.transforms.date_contract import SourceDateProfile
+
+
+@pytest.fixture(scope="module")
+def staging_postgres(request):
+    """Check the application server before the shared fixture provisions its UUID database."""
+    host = config("POSTGRES_HOST", default="127.0.0.1")
+    if (
+        host not in {"localhost", "127.0.0.1", "::1"}
+        or config("POSTGRES_PORT", default="5432") != "5432"
+        or any(os.environ.get(key) for key in ("PGHOSTADDR", "PGSERVICE", "PGOPTIONS"))
+    ):
+        pytest.fail("Expected the dedicated local application test server.", pytrace=False)
+    try:
+        with psycopg.connect(
+            dbname="postgres",
+            host=host,
+            port=5432,
+            user=config("POSTGRES_USER", default="dataxai"),
+            password=config("POSTGRES_PASSWORD", default="dataxai"),
+            connect_timeout=3,
+        ) as admin:
+            permission = admin.execute(
+                "SELECT rolcreatedb OR rolsuper FROM pg_roles WHERE rolname = current_user"
+            ).fetchone()
+    except psycopg.Error:
+        permission = None
+    if permission != (True,):
+        pytest.fail("Application fixture requires local login and CREATE DATABASE.", pytrace=False)
+    return request.getfixturevalue("disposable_postgres")
 
 
 def database():
@@ -331,3 +376,254 @@ def test_broken_sink_preserves_persisted_receipt(binding):
         logger.removeHandler(sink)
         logger.setLevel(previous_level)
         sink.close()
+
+
+def _completion_state():
+    """All persisted columns, including other keys and unlinked runs in the serial fixture."""
+    return {
+        model: {row[model._meta.pk.attname]: row for row in model.objects.values()}
+        for model in (
+            StagingIngestion,
+            IngestionCompletionProof,
+            StagingBatch,
+            StagingRecord,
+            TransformationAttempt,
+            PipelineRun,
+            TransformationRecordResult,
+        )
+    }
+
+
+@pytest.mark.parametrize("kind", ["CSV", "XLSX"])
+def test_snapshot_cleanup_failure_preserves_unsealed_execution_and_recovers(
+    kind, tmp_path, store, monkeypatch, caplog
+):
+    db = database()
+    rows = [
+        ["C001", "M", "Mug", -2, "2026-10-20 14:30:00", 1.20, 17, "Pakistan"],
+        ["C002", "M", "Mug", -2, None, 1.20, 17, "Pakistan"],
+    ]
+    if kind == "CSV":
+        path = tmp_path / "orders.csv"
+        with path.open("w", newline="", encoding="utf-8") as stream:
+            csv.writer(stream).writerows([CANONICAL_COLUMNS, *rows])
+        scope = completion.CsvScope(path.name, 1)
+        adapter, resource_name, opener = CsvSource, "_reader", "open_snapshot_csv"
+        source_name = f"csv:{path.name}"
+        coverage = {"csv_header": "verified", "exhaustion": "natural"}
+    else:
+        path = workbook(
+            tmp_path, {"Empty": [CANONICAL_COLUMNS], "Orders": [CANONICAL_COLUMNS, *rows]}
+        )
+        scope = completion.ExcelScope(path.name, 1, ("Orders",))
+        adapter, resource_name, opener = ExcelSource, "_workbook", "open_snapshot_excel"
+        source_name = f"xlsx:{path.name}:Orders"
+        coverage = {
+            "selection": "selected",
+            "exhaustion": "natural",
+            "sheets": [{"name": "Orders", "header": "verified", "rows": 2, "batches": 2}],
+        }
+    ingestion = StagingIngestion.objects.create(
+        source_kind="CSV" if kind == "CSV" else "EXCEL", source_reference=path.name
+    )
+    key = uuid4()
+    original = path.read_bytes()
+    digest = hashlib.sha256(original).hexdigest()
+    proof = completion.bind_file_ingestion(
+        ingestion_id=ingestion.pk,
+        input_path=path,
+        scope=scope,
+        execution_key=key,
+        profile=SourceDateProfile(),
+        transformation_version="proof-v1",
+        expected_sha256=digest,
+        expected_batch_count=2,
+        expected_row_count=2,
+    )
+    snapshot = store / digest
+    assert snapshot.read_bytes() == original
+    assert proof.pk == ingestion.pk and proof.execution_key == key and proof.bound_at is not None
+    assert (proof.snapshot_sha256, proof.snapshot_size) == (digest, len(original))
+    assert (proof.source_kind, proof.source_reference, proof.batch_size) == (
+        ingestion.source_kind,
+        path.name,
+        1,
+    )
+    assert proof.parser_recipe == completion._recipe(scope)
+    assert proof.binding_digest == completion._binding_digest(proof)
+    counts = {
+        "source_batches": 2,
+        "source_rows": 2,
+        "staged_batches": 2,
+        "staged_rows": 2,
+        "successful_batches": 2,
+        "safe_rows": 1,
+        "unresolved_rows": 1,
+    }
+    before = _completion_state()
+    bound = before[IngestionCompletionProof][proof.pk]
+    assert {k: getattr(proof, k) for k in bound} == bound
+    parent = before[StagingIngestion][proof.pk]
+    assert parent["status"] == "OPEN"
+    assert all(parent[k] is None for k in ("completed_at", "final_row_count", "final_batch_count"))
+    seal_fields = (*counts, "coverage", "manifest_digest", "sealed_at", "receipt_digest")
+    assert all(bound[k] is None for k in seal_fields)
+    totals = execution_counts()
+    with db.cursor() as cursor:
+        cursor.execute("SELECT pg_backend_pid()")
+        (writer_pid,) = cursor.fetchone()
+
+    def raw_staging():
+        # Compare the stored SER-v1 text before Django's field decoding.
+        return [_raw_snapshot(batch) for batch in ingestion.batches.order_by("batch_number")]
+
+    def observe_commit():
+        observer = database()
+        try:
+            with observer.cursor() as cursor:
+                cursor.execute("SELECT pg_backend_pid(), current_database()")
+                pid, name = cursor.fetchone()
+            assert pid != writer_pid and name == db.settings_dict["NAME"]
+            assert_exact_execution(proof.pk, key, [(1, 0), (0, 1)], totals)
+            state = _completion_state()
+            for model, prior in before.items():
+                delta = 0 if model in (StagingIngestion, IngestionCompletionProof) else 2
+                assert len(state[model]) == len(prior) + delta
+                assert {pk: state[model][pk] for pk in prior} == prior
+            return state, raw_staging()
+        finally:
+            observer.close()
+
+    real_open = getattr(completion, opener)
+    traversals = []
+
+    @contextmanager
+    def observe_open(identity, **kwargs):
+        assert identity == completion.SourceSnapshot(digest, len(original))
+        with real_open(identity, **kwargs) as traversal:
+            traversals.append(traversal)
+            yield traversal
+
+    committed = []
+    fault = OSError(f"private-cleanup-marker token=synthetic-only {path}")
+    real_exit = adapter.__exit__
+
+    def interrupted_exit(source, *exc_info):
+        resource = getattr(source, resource_name)
+        real_close = resource.close
+
+        def close():
+            try:
+                (traversal,) = traversals
+                assert traversal._exhausted and not traversal.verified_exhausted
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    state = pool.submit(observe_commit).result(timeout=30)
+            finally:
+                real_close()
+            committed.append(state)
+            raise fault
+
+        # pandas may close at iterator EOF. Wrap only the adapter's final close.
+        with monkeypatch.context() as patch:
+            patch.setattr(resource, "close", close)
+            return real_exit(source, *exc_info)
+
+    def finish():
+        return completion.complete_bound_ingestion(ingestion_id=proof.pk, claim_ttl_seconds=60)
+
+    with monkeypatch.context() as watch:
+        watch.setattr(completion, opener, observe_open)
+        with monkeypatch.context() as inject:
+            inject.setattr(adapter, "__exit__", interrupted_exit)
+            with pytest.raises(OSError) as caught:
+                finish()
+        assert caught.value is fault
+        ((at_close, original_staging),) = committed
+        (failed,) = traversals
+        assert not failed.verified_exhausted and failed.postcheck_seconds is None
+        assert _completion_state() == at_close and raw_staging() == original_staging
+        assert snapshot.read_bytes() == original
+
+        expected = {
+            "operation": "complete_bound_ingestion",
+            "stage": "source_cleanup",
+            "ingestion_id": str(proof.pk),
+            "execution_key": str(key),
+            "observation": "exception",
+            "code": "etl_error",
+            "category": "source_io",
+            "reason": "unspecified",
+            "message": "An I/O operation failed. Inspect resource availability and permissions.",
+            "recovery": "operator_review",
+        }
+        assert failure_events(caplog) == [expected]
+        (event,) = [r for r in caplog.records if hasattr(r, "etl")]
+        assert event.name == completion.__name__ and event.levelno == logging.WARNING
+        assert event.args == ()
+        assert event.exc_info is event.stack_info is None
+        assert logging.Formatter("%(message)s").format(event) == (
+            "etl.coordinator_failure " + json.dumps(expected, sort_keys=True)
+        )
+
+        manifest = completion._Manifest()
+        for number, staged in enumerate(ingestion.batches.order_by("batch_number")):
+            batch = load_source_batch(ingestion_id=proof.pk, batch_number=number)
+            assert (batch.source_name, batch.batch_number) == (source_name, number)
+            assert list(batch.data.index) == [number if kind == "CSV" else 0]
+            assert batch.data["Invoice"].tolist() == [rows[number][0]]
+            record = staged.records.get()
+            outcome = record.results.get()
+            assert record.row_position == record.record_payload["row_position"] == 0
+            assert outcome.batch_id == outcome.attempt.batch_id == staged.pk
+            manifest.add(number, source_name, 1, staged.content_hash)
+        recovered = finish()
+        assert len(traversals) == 2 and traversals[1].verified_exhausted
+
+    assert recovered.pk == proof.pk and recovered.execution_key == key
+    assert recovered.sealed_at is not None and recovered.sealed_at >= proof.bound_at
+    assert recovered.receipt_digest == completion._receipt_digest(recovered)
+    assert_exact_execution(proof.pk, key, [(1, 0), (0, 1)], totals)
+    sealed = _completion_state()
+    receipt = {
+        **bound,
+        **counts,
+        "coverage": coverage,
+        "manifest_digest": manifest.digest,
+        "receipt_digest": recovered.receipt_digest,
+        "sealed_at": recovered.sealed_at,
+    }
+    assert {k: getattr(recovered, k) for k in receipt} == receipt
+    completed_parent = {
+        **parent,
+        "status": "COMPLETE",
+        "final_row_count": 2,
+        "final_batch_count": 2,
+        "completed_at": recovered.sealed_at,
+        "updated_at": sealed[StagingIngestion][proof.pk]["updated_at"],
+    }
+    assert sealed == {
+        **at_close,
+        StagingIngestion: {**at_close[StagingIngestion], proof.pk: completed_parent},
+        IngestionCompletionProof: {**at_close[IngestionCompletionProof], proof.pk: receipt},
+    }
+    assert raw_staging() == original_staging and snapshot.read_bytes() == original
+
+    def forbid_open(*args, **kwargs):
+        pytest.fail("Sealed acknowledgment reopened the snapshot")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(completion, "open_snapshot_csv", forbid_open)
+        patch.setattr(completion, "open_snapshot_excel", forbid_open)
+        with CaptureQueriesContext(db) as activity:
+            acknowledged = finish()
+        # Sealed acknowledgment still checks the stored parser recipe.
+        patch.setattr(completion.pandas, "__version__", "incompatible")
+        with pytest.raises(StagingIntegrityError, match="Incompatible parser recipe or runtime"):
+            finish()
+    assert activity.captured_queries
+    for query in activity:
+        # The verifier locks the receipt with SELECT ... FOR UPDATE.
+        sql = re.sub(r"\bFOR\s+(?:NO\s+KEY\s+)?UPDATE\b", "", query["sql"], flags=re.I)
+        assert not re.search(r"\b(?:INSERT|UPDATE|DELETE)\b", sql, re.I)
+    assert {k: getattr(acknowledged, k) for k in receipt} == receipt
+    assert _completion_state() == sealed and raw_staging() == original_staging
