@@ -254,3 +254,37 @@ Prior Codex execution evidence is separate and overlapping: original focused tes
 The existing worktree is D:\dataxai-etl-4.6-gate2 on codex/etl-4.6-gate2, with HEAD c70ffd14899ac69792d18d93bb109ca9f46e31f5. Gate 2 technical changes are uncommitted. Automated Git integration authorization is withdrawn: the owner will manually stage, commit, push, create/merge the PR and review CI. Manual Git integration and Gate 2 CI verification remain pending. No Gate 2 commit, push, PR or merge was performed by Codex.
 
 The current authorization covers only AGENTS.md, docs/PROJECT_STATE.md and docs/PROJECT_ROADMAP.md. No tests or benchmarks were rerun for this documentation task. Do not modify technical files, stage, commit, push, create/merge PRs, rename branches, change Git configuration, alter other worktrees or update the Excel tracker. Gate 3 is not implemented or authorized; stop after documentation and reporting. Volume 4.6 remains incomplete.
+
+
+## Permanent guardrail additions — 2026-11-27
+
+These requirements apply to all future volumes, subphases and gates, together with the existing permanent engineering guardrails:
+
+- Preserve accepted contracts, cross-component compatibility, meaningful classifications, internal metadata, provenance and lineage.
+- Obtain independent source review of corrections before expensive verification; keep review evidence separate from test-execution evidence.
+- Verify operational diagnostic visibility through ordinary rendered logging output, not only in-memory log fields. Preserve safe structured projections and sensitive-information protection.
+- Distinguish preservation of prior identities from exact execution accounting; verify absence of unintended additional attempts, runs and outcomes where recovery or acknowledgment is affected.
+- Use focused regression tests and conserve compute resources; expand verification only for an identified risk and within explicit owner authorization.
+- Use professional, project-oriented branch names. Verify the intended branch name and commit message before authorized Git write commands.
+- Preserve the owner's configured Git author and committer identity; do not override identity or modify Git credentials/configuration without explicit authorization.
+- Keep technical and documentation/acceptance commits separate. Explicit owner authorization governs Git operations; acceptance alone does not authorize staging, committing, pushing, PR creation or merging.
+
+## 2026-11-27 — Current gate: Volume 4.6 Gate 3 formally accepted locally
+
+<!-- DATAXAI CHECKPOINT 2026-11-27 V4.6 GATE3 AGENTS -->
+
+This checkpoint supersedes earlier current-gate and integration-pending summaries while preserving their historical context. Gate 1 is accepted and merged through [PR #15](https://github.com/MianArslan09/DataXAi/pull/15) at `c70ffd14899ac69792d18d93bb109ca9f46e31f5`. Gate 2 is accepted and merged through [PR #16](https://github.com/MianArslan09/DataXAi/pull/16) at `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`.
+
+Gate 3 — Coordinator Diagnostics and Failure Verification — is IMPLEMENTED, TESTED, LOCALLY VERIFIED and POSTGRES VERIFIED within the recorded scope, independently reviewed and corrected, and FORMALLY OWNER ACCEPTED on 2026-11-27. The owner accepts its implemented, independently reviewed and locally verified scope. See the [dated project-state checkpoint](docs/PROJECT_STATE.md#2026-11-27--volume-46-gate-3-formal-local-acceptance-and-manual-integration-handoff) for all ten technical files, evidence provenance, resolved findings and limitations.
+
+Preserve safe coordinator operation/stage attribution and correlation using existing identities, Gate 1 classification and Gate 2 database-wrapper handling, best-effort logging/serialization isolation, and nested reporting without duplicate primary failure observations. The rendered message retains the `etl.coordinator_failure` prefix alongside safe JSON; the structured `LogRecord.etl` projection is preserved. Observed terminal FAILED attempts are distinguished from corrupt completion evidence without changing exception families, terminal-state immutability or recovery policy. Preserve transaction boundaries, lock ordering, SER-v1, source metadata, ordered lineage, claim fencing, explicit recovery, SQL NULL outcomes and atomic completion proofs.
+
+Separate prior Codex runs: 51 focused passes; 218 selected compatibility passes; 55 corrected focused passes with zero failures/skips. These counts overlap and must not be summed; the 218-test selection was not rerun after corrections. Targeted Ruff, Black, isort and whitespace checks passed. Owner-reported independent reviews covered ten initial files and three corrected files; both findings were resolved without further blocking defects within that scope. Source review is not independent test execution.
+
+Owner-executed PowerShell verification against the corrected implementation and isolated disposable local application PostgreSQL databases: 16 passed in 24.62 seconds, zero failures/skips. The initial attempt had 16 fixture setup errors because PostgreSQL containers were stopped; after starting Docker Desktop and confirming the role's required permissions, the same selection passed without implementation changes. No credentials are recorded. No tests were rerun for this documentation update.
+
+Post-commit acknowledgment loss was simulated after real successful commits; this is not certification of network partitions, server crashes or production crash durability. Logging may lose observations if its sink fails. Original exception chains remain potentially sensitive; recovery guidance is not automatic retry permission. Prior Volume 4.4/4.5 limitations remain applicable. SAFE remains date interpretation, not business validation. No new models, migrations, states, automatic retries, repair workflows, APIs or frontend features are introduced. The existing `application_postgres` fixture already enforces PostgreSQL availability for the selected required tests; no CI configuration change was necessary.
+
+Worktree: `D:\dataxai-etl-4.6-gate3`; branch: `feat/etl-4.6-gate3`; local HEAD: `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`. All three Volume 4.6 technical gates are locally verified or previously integrated. Gate 3 technical and documentation commits, GitHub CI and merge remain pending. Formal Volume 4.6 closure requires successful integration into main.
+
+Current authorization is documentation-only for `AGENTS.md`, `docs/PROJECT_STATE.md` and `docs/PROJECT_ROADMAP.md`. The owner will perform all Git integration manually. Do not stage, commit, push, rename branches, create/merge PRs, change Git credentials, modify technical files or the Excel tracker, or alter protected worktrees. Volume 4.7 is the next planned milestone after formal Volume 4.6 closure; scope review and separate owner authorization are required. Stop after documentation and reporting.

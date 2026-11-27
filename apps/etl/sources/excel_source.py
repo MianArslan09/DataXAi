@@ -23,6 +23,7 @@ import pandas as pd
 from openpyxl.reader.excel import SUPPORTED_FORMATS
 from openpyxl.utils.exceptions import InvalidFileException
 
+from etl._coordinator_diagnostics import safe_log
 from etl.exceptions import MalformedSourceError, MissingColumnsError, SourceNotFoundError
 from etl.sources._cleanup import cleanup_on_exit, close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
@@ -119,7 +120,7 @@ class ExcelSource:
                 except StopIteration:
                     if visits is not None:
                         raise MalformedSourceError("Selected worksheet has no header.") from None
-                    logger.warning("excel_source.empty_sheet")
+                    safe_log(logger, logging.WARNING, "excel_source.empty_sheet", extra={})
                     continue
 
                 missing = set(CANONICAL_COLUMNS) - set(header)
@@ -180,7 +181,9 @@ class ExcelSource:
 
     def _make_batch(self, header, rows, sheet_name: str, batch_number: int) -> SourceBatch:
         df = pd.DataFrame(rows, columns=header)
-        logger.info(
+        safe_log(
+            logger,
+            logging.INFO,
             "excel_source.batch",
             extra={
                 "batch": batch_number,

@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
 
+from etl._coordinator_diagnostics import safe_log
 from etl.exceptions import ETLError, MissingColumnsError, SourceConnectionError
 from etl.sources._cleanup import cleanup_on_exit, close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
@@ -84,7 +85,9 @@ class PostgresSource:
                         raise MissingColumnsError(
                             f"Source database is missing columns: {sorted(missing)}"
                         )
-                    logger.info(
+                    safe_log(
+                        logger,
+                        logging.INFO,
                         "postgres_source.batch",
                         extra={"batch": batch_number, "rows": len(chunk)},
                     )

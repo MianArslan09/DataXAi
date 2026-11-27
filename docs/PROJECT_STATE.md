@@ -1800,3 +1800,100 @@ Immutable snapshot custody, SER-v1, original ingestion/batch identities, source 
 Automated Git integration authorization is withdrawn. Gate 2 is locally accepted, not committed or merged; manual staging, commits, push, PR review/merge and GitHub CI verification are pending with the owner. Codex performed no Gate 2 staging, commit, push, PR creation or merge. Prior authorized Gate 1 integration is preserved and has not been reversed. The current documentation-only authorization covers AGENTS.md, this file and PROJECT_ROADMAP.md; it authorizes no technical changes, Git writes, tests, other-worktree changes or Excel tracker updates.
 
 Gate 3 is not implemented or authorized. Volume 4.6 remains incomplete. Volumes 4.7–4.8 ETL testing and 4.9 verification remain later owner-gated work; no detailed new scope is approved by this checkpoint.
+
+
+## 2026-11-27 — Volume 4.6 Gate 3: Formal local acceptance and manual integration handoff
+
+<!-- DATAXAI CHECKPOINT 2026-11-27 V4.6 GATE3 STATE -->
+
+**IMPLEMENTED — TESTED — LOCALLY VERIFIED — POSTGRES VERIFIED within the recorded scope; independently reviewed, corrected and FORMALLY OWNER ACCEPTED on 2026-11-27.** The owner formally accepts Gate 3 within its implemented, independently reviewed and locally verified scope. Acceptance does not establish GitHub CI success or integration. This dated reconciliation supersedes earlier current-status statements without rewriting historical checkpoints.
+
+### Baseline and milestone status
+
+Repository: `MianArslan09/DataXAi`. Documentation preflight verified local worktree `D:\dataxai-etl-4.6-gate3`, branch `feat/etl-4.6-gate3`, HEAD `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`, and an empty staging area. The existing ten-file technical change set is uncommitted.
+
+- Gate 1 — Failure Classification — is accepted and merged through [PR #15](https://github.com/MianArslan09/DataXAi/pull/15), merge commit `c70ffd14899ac69792d18d93bb109ca9f46e31f5`.
+- Gate 2 — Source and Cleanup Correctness — is accepted and merged through [PR #16](https://github.com/MianArslan09/DataXAi/pull/16), merge commit `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`. Earlier Gate 2 uncommitted/integration-pending statements remain historical.
+- Gate 3 — Coordinator Diagnostics and Failure Verification — is formally accepted locally. Technical and documentation commits, GitHub CI and merge remain pending with the owner.
+
+All three Volume 4.6 technical gates are locally verified or previously integrated. **Formal Volume 4.6 closure remains pending successful integration into main.** The previously accepted Volume 4.5.3b PR #14 baseline and its limitations remain preserved.
+
+### Implemented scope and technical files
+
+Coordinator boundaries report safe structured failures with operation and processing stage, correlating existing ingestion, execution, batch, attempt and pipeline-run identities only when available in memory. Diagnostic enrichment performs no additional ORM queries. Stages distinguish admission, snapshot capture/binding, source reading/cleanup, staging, reconstruction, claiming, interpretation, finalization, sealing and acknowledgment as applicable.
+
+Gate 1 classification and Gate 2 recognized database-wrapper classification are reused. Controlled catalog messages and allowlisted fields exclude raw exception text/representations, causes, tracebacks, credentials, source values, source paths, worksheet/table names, SQL, claim-owner tokens and arbitrary configuration. The fixed `etl.coordinator_failure` prefix precedes a safe JSON projection in ordinary rendered output; the same projection remains in `LogRecord.etl` for structured consumers.
+
+Best-effort logging and serialization isolation preserve original exception propagation and accepted return outcomes. Existing source and completion timing logs also receive sink-failure protection. Nested coordinators delegate reporting without duplicate primary failure observations. A returned FAILED run is an observed result, not a claim that this invocation created a new terminal failure. The controlled `terminal_attempt_failed` observation distinguishes this condition from corrupt completion evidence while preserving the existing exception family. Classifying the raw exception alone retains the prior classifier behavior.
+
+The ten technical files are:
+
+- `apps/etl/error_handling.py`
+- `apps/etl/_coordinator_diagnostics.py`
+- `apps/etl/pipeline_runs.py`
+- `apps/etl/ingestion_runs.py`
+- `apps/etl/ingestion_completion.py`
+- `apps/etl/sources/csv_source.py`
+- `apps/etl/sources/excel_source.py`
+- `apps/etl/sources/postgres_source.py`
+- `apps/etl/tests/test_coordinator_diagnostics.py`
+- `apps/etl/tests/test_coordinator_failures_postgres.py`
+
+Existing transaction boundaries, lock ordering, lifecycle transitions, terminal FAILED immutability, execution-key binding, claim-generation fencing and explicit recovery remain unchanged. Preserve immutable snapshot custody and verified exhaustion, SER-v1, source metadata, original ingestion/batch identities, ordered manifests, positional lineage, verified replay, SQL NULL outcome payloads, atomic proof sealing and persisted-receipt acknowledgment. Diagnostics are observations, not transaction records or completion evidence; they do not assert rollback when commit outcome is uncertain.
+
+### Independent review findings and resolutions
+
+The owner reports that the initial independent source review inspected all ten changed files and found the architecture acceptable subject to two targeted corrections:
+
+1. **Operational diagnostic visibility:** structured extras alone were absent from ordinary formatter output. The correction includes the existing safe projection as standard-library JSON in the rendered message, retains the stable event prefix and `LogRecord.etl`, and updates event-selection tests. Real `StreamHandler` tests verify ordinary rendered visibility and sensitive-information exclusion; focused fault injection verifies serialization-failure isolation. No custom logging framework, dependencies or settings changes were introduced.
+2. **Exact-accounting verification:** subset comparisons preserved prior identities but did not exclude unintended extra records. The existing seven PostgreSQL cases now also check exact staging, attempt, pipeline-run and outcome accounting, original execution keys, SQL NULL payloads, complete staged-record membership, and global attempt/run counts, including unintended unlinked runs. Sealed acknowledgment requires exact before/after identity equality, unchanged receipt and sealing timestamp, and no acknowledgment writes. Prior identity-preservation assertions remain in place.
+
+All three corrected files (`_coordinator_diagnostics.py` and its two test files) were subsequently inspected independently. Both findings were resolved, with no further blocking defects identified within the reviewed scope. These reviews are source assessments, not independent test execution.
+
+### Separate verification evidence and provenance
+
+| Verification | Actual result | Evidence source |
+| --- | --- | --- |
+| Initial Gate 3 focused tests | 51 passed | Prior Codex execution |
+| Selected compatibility tests | 218 passed | Prior Codex execution |
+| Corrected focused tests | 55 passed, zero failures/skips | Prior Codex execution |
+| Initial independent source review | 10 files reviewed | Owner-reported independent review |
+| Independent correction review | 3 files reviewed | Owner-reported independent review |
+| Review findings resolved | 2 of 2 | Owner-reported independent review |
+| PostgreSQL verification on corrected implementation | 16 passed in 24.62 seconds, zero failures/skips | Owner-executed PowerShell; result supplied by owner |
+| Targeted Ruff, Black, isort and whitespace checks | Passed | Prior Codex execution |
+
+These are separate, overlapping test selections: **do not sum their counts.** The earlier 218-test compatibility selection was not rerun after the corrections. Codex previously collected the 16 PostgreSQL cases without executing them; the subsequent successful execution was performed by the owner. No pytest or database tests were rerun during this documentation update; only lightweight documentation review and whitespace verification are authorized.
+
+The owner's initial PostgreSQL attempt encountered 16 fixture setup errors because the PostgreSQL containers were not running. After starting Docker Desktop and confirming the database role's required permissions, the same selection passed all 16 tests. No implementation changes occurred between those attempts. The corrected implementation was tested against local application PostgreSQL using isolated disposable databases. This environment-startup incident is retained as part of the evidence history; no passwords or credentials are recorded.
+
+### PostgreSQL verification coverage
+
+The successful 16-case selection comprised seven Gate 3 cases plus nine existing compatibility cases:
+
+- Three real pre-commit connection interruptions during staging, outcome persistence and completion sealing, closing only the test's own connection.
+- Three simulated post-commit acknowledgment losses after successful staging, finalization and sealing commits.
+- One broken logging-handler isolation case preserving persisted completion.
+- Pipeline projection rollback; claim expiry and stale-worker fencing; authoritative attempt lifecycle; read-only completion acknowledgment; and rejection of corrupted completion evidence, including SQL NULL, execution-key and sequence checks.
+
+Within this tested scope, small synthetic fixtures verified committed-identity preservation and exact final execution accounting. The bound fixture reconciles two batches, two attempts, two pipeline runs and two outcomes (one SAFE, one UNRESOLVED); the separate batch-recovery fixture reconciles two batches and six SAFE outcomes. Recovery and acknowledgment retain the original identities and accepted fencing/receipt requirements. No shared database sessions were terminated by the test design.
+
+No full UCI ingestion, million-row benchmark, local full-backend regression or Docker build was executed during Gate 3. Starting Docker Desktop for PostgreSQL availability is not Docker-build verification. No CI configuration change was necessary for these selected required tests: the existing `application_postgres` fixture enforces PostgreSQL availability rather than silently skipping.
+
+### Limitations and scope boundaries
+
+Post-commit acknowledgment loss was simulated after a real successful database commit. These tests do not certify real network partitions, server crashes or production crash durability. Exact global accounting uses the existing isolated, serial disposable-database fixture.
+
+Logging remains best-effort: a failed sink or serialization failure can lose a diagnostic observation without altering ETL behavior. Original exception chains remain potentially sensitive and must not be exposed directly in future public responses. Recovery guidance is not permission for automatic retries, terminal-attempt revival, execution rebinding or bypassing claim/receipt verification.
+
+Previously accepted Volume 4.4 and 4.5 limitations remain applicable, including documented snapshot custody/durability and production parser-account isolation qualifications, PostgreSQL-source completion deferral and downstream loading-policy boundaries. SAFE remains a date-interpretation outcome, not business validation or warehouse readiness.
+
+No new database models, migrations, lifecycle states, automatic retries, repair workflows, persistent error-history storage, orchestration, API changes or frontend features were introduced. Future API use remains contract-only and must consume safe projections; the existing exception handler, HTTP behavior, authentication and authorization remain unchanged.
+
+### Acceptance, preservation and manual integration boundary
+
+The owner formally accepts Gate 3 within the implemented, independently reviewed and locally verified scope. The owner will perform all Git integration manually, keeping technical and documentation/acceptance commits separate. Gate 3 technical/documentation commits, GitHub CI and merge are pending; Gate 3 is not yet merged and Volume 4.6 is not formally closed.
+
+This task authorizes changes only to `AGENTS.md`, `docs/PROJECT_STATE.md` and `docs/PROJECT_ROADMAP.md`. Ten technical-file hashes were recorded before editing for post-edit preservation comparison. Preserve all existing worktrees, unrelated files, historical records and evidence. No staging, commits, push, branch rename, PR action, merge, Git identity/credential change, Excel tracker update or later implementation is authorized.
+
+Volume 4.7 is the next planned milestone after formal Volume 4.6 closure, subject to separate scope review and owner authorization. This checkpoint establishes no new Volume 4.7 requirements and authorizes no implementation of it or later milestones.
