@@ -6,11 +6,13 @@ share a transaction. A synchronous operation may outlast its lease. Recovery the
 requires an explicit retry with the same identities. No batch completes an ingestion.
 """
 
+import logging
 from uuid import UUID
 
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django.db.models import Count, Max, Min
 
+from etl._coordinator_diagnostics import CoordinatorDiagnostic
 from etl.attempt_claims import _validate_claim_state, claim_attempt, renew_claim
 from etl.exceptions import (
     AttemptConflictError,
@@ -25,6 +27,8 @@ from etl.staging_reader import load_source_batch
 from etl.transformation_attempts import complete_attempt, fail_attempt, register_attempt
 from etl.transforms import AliasMapper, DateNormalizer
 from etl.transforms.date_contract import SourceDateProfile
+
+logger = logging.getLogger(__name__)
 
 
 def _check_entry(ttl):
@@ -126,16 +130,23 @@ def stage_and_run_batch(
     claim_ttl_seconds: int,
 ) -> PipelineRun:
     """Commit or verify the raw batch, then execute against its persisted original."""
-    _check_entry(claim_ttl_seconds)
-    staged = stage_source_batch(ingestion_id=ingestion_id, batch=batch)
-    return run_staged_batch(
-        ingestion_id=ingestion_id,
-        batch_number=staged.batch_number,
-        attempt_key=attempt_key,
-        profile=profile,
-        transformation_version=transformation_version,
-        claim_ttl_seconds=claim_ttl_seconds,
-    )
+    with CoordinatorDiagnostic(
+        logger, "stage_and_run_batch", ingestion_id, attempt_key
+    ) as diagnostic:
+        _check_entry(claim_ttl_seconds)
+        diagnostic.stage = "staging"
+        if type(batch) is SourceBatch:
+            diagnostic.batch_number = batch.batch_number
+        staged = stage_source_batch(ingestion_id=ingestion_id, batch=batch)
+        diagnostic.stage = None  # The child reports its own failures.
+        return run_staged_batch(
+            ingestion_id=ingestion_id,
+            batch_number=staged.batch_number,
+            attempt_key=attempt_key,
+            profile=profile,
+            transformation_version=transformation_version,
+            claim_ttl_seconds=claim_ttl_seconds,
+        )
 
 
 def run_staged_batch(
@@ -146,73 +157,93 @@ def run_staged_batch(
     profile: SourceDateProfile,
     transformation_version: str,
     claim_ttl_seconds: int,
+    _report_failed_result: bool = True,
 ) -> PipelineRun:
     """Execute or reconcile one attempt. Controlled conversion failure returns a FAILED run."""
-    _check_entry(claim_ttl_seconds)
-    with transaction.atomic(using=DEFAULT_DB_ALIAS):
-        attempt = register_attempt(
-            ingestion_id=ingestion_id,
-            batch_number=batch_number,
-            attempt_key=attempt_key,
-            profile=profile,
-            transformation_version=transformation_version,
-        )
-        # Registration inserted this row or locked the existing identity.
-        _check_batch_count(attempt.batch)
-        if attempt.status in ("REGISTERED", "RUNNING"):
-            _validate_claim_state(attempt)
-            if attempt.results.using(DEFAULT_DB_ALIAS).exists():
-                raise AttemptIntegrityError("Unfinished attempt has committed outcomes.")
-            _project(attempt)
-
-    claim = None
-    with transaction.atomic(using=DEFAULT_DB_ALIAS):
-        attempt = _locked(attempt.pk)
-        if attempt.status == "FAILED":
-            verified = fail_attempt(
-                attempt_id=attempt.pk,
-                failure_code=attempt.failure_code,
-                failure_stage=attempt.failure_stage,
-                diagnostics=attempt.failure_diagnostics,
-            )
-            return _project(verified)
-        if attempt.status != "SUCCEEDED":
-            claim = claim_attempt(attempt_id=attempt.pk, ttl_seconds=claim_ttl_seconds)
-            attempt.refresh_from_db(using=DEFAULT_DB_ALIAS)
-            _project(attempt)
-
-    source = load_source_batch(ingestion_id=ingestion_id, batch_number=batch_number)
-    if claim is not None:
-        renew_claim(claim=claim, ttl_seconds=claim_ttl_seconds)
-    mapped = AliasMapper().transform(source)
-    try:
-        result = DateNormalizer(profile).apply(mapped)
-    except TypeConversionError:
-        if claim is None:
-            raise AttemptIntegrityError(
-                "Successful attempt interpretation cannot be reproduced."
-            ) from None
-        result = None
-
-    if claim is not None:
-        renew_claim(claim=claim, ttl_seconds=claim_ttl_seconds)
-    with transaction.atomic(using=DEFAULT_DB_ALIAS):
-        attempt = _locked(attempt.pk)
-        if claim is not None and attempt.status != "RUNNING":
-            raise AttemptConflictError("Attempt ownership ended before finalization.")
-        if result is None:
-            attempt = fail_attempt(
-                attempt_id=attempt.pk,
-                failure_code="TYPE_CONVERSION_ERROR",
-                failure_stage="INTERPRETATION",
-                diagnostics={"input_rows": len(source)},
-                claim=claim,
-            )
-        else:
-            attempt = complete_attempt(
-                attempt_id=attempt.pk,
-                result=result,
+    with CoordinatorDiagnostic(
+        logger, "run_staged_batch", ingestion_id, attempt_key, batch_number
+    ) as diagnostic:
+        _check_entry(claim_ttl_seconds)
+        with transaction.atomic(using=DEFAULT_DB_ALIAS):
+            attempt = register_attempt(
+                ingestion_id=ingestion_id,
+                batch_number=batch_number,
+                attempt_key=attempt_key,
+                profile=profile,
                 transformation_version=transformation_version,
-                claim=claim,
             )
-        return _project(attempt)
+            diagnostic.attempt_id = attempt.pk
+            # Registration inserted this row or locked the existing identity.
+            _check_batch_count(attempt.batch)
+            if attempt.status in ("REGISTERED", "RUNNING"):
+                _validate_claim_state(attempt)
+                if attempt.results.using(DEFAULT_DB_ALIAS).exists():
+                    raise AttemptIntegrityError("Unfinished attempt has committed outcomes.")
+                diagnostic.record_run(_project(attempt))
+
+        claim = None
+        diagnostic.stage = "claiming"
+        with transaction.atomic(using=DEFAULT_DB_ALIAS):
+            attempt = _locked(attempt.pk)
+            if attempt.status == "FAILED":
+                diagnostic.stage = "finalization"
+                verified = fail_attempt(
+                    attempt_id=attempt.pk,
+                    failure_code=attempt.failure_code,
+                    failure_stage=attempt.failure_stage,
+                    diagnostics=attempt.failure_diagnostics,
+                )
+                run = _project(verified)
+                diagnostic.record_run(run)
+                if _report_failed_result:
+                    diagnostic.failed_result()
+                return run
+            if attempt.status != "SUCCEEDED":
+                claim = claim_attempt(attempt_id=attempt.pk, ttl_seconds=claim_ttl_seconds)
+                attempt.refresh_from_db(using=DEFAULT_DB_ALIAS)
+                diagnostic.record_run(_project(attempt))
+
+        diagnostic.stage = "reconstruction"
+        source = load_source_batch(ingestion_id=ingestion_id, batch_number=batch_number)
+        if claim is not None:
+            diagnostic.stage = "claiming"
+            renew_claim(claim=claim, ttl_seconds=claim_ttl_seconds)
+        diagnostic.stage = "interpretation"
+        mapped = AliasMapper().transform(source)
+        try:
+            result = DateNormalizer(profile).apply(mapped)
+        except TypeConversionError:
+            if claim is None:
+                raise AttemptIntegrityError(
+                    "Successful attempt interpretation cannot be reproduced."
+                ) from None
+            result = None
+
+        if claim is not None:
+            diagnostic.stage = "claiming"
+            renew_claim(claim=claim, ttl_seconds=claim_ttl_seconds)
+        diagnostic.stage = "finalization"
+        with transaction.atomic(using=DEFAULT_DB_ALIAS):
+            attempt = _locked(attempt.pk)
+            if claim is not None and attempt.status != "RUNNING":
+                raise AttemptConflictError("Attempt ownership ended before finalization.")
+            if result is None:
+                attempt = fail_attempt(
+                    attempt_id=attempt.pk,
+                    failure_code="TYPE_CONVERSION_ERROR",
+                    failure_stage="INTERPRETATION",
+                    diagnostics={"input_rows": len(source)},
+                    claim=claim,
+                )
+            else:
+                attempt = complete_attempt(
+                    attempt_id=attempt.pk,
+                    result=result,
+                    transformation_version=transformation_version,
+                    claim=claim,
+                )
+            run = _project(attempt)
+            diagnostic.record_run(run)
+            if result is None and _report_failed_result:
+                diagnostic.failed_result()
+            return run

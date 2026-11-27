@@ -4,6 +4,7 @@ The empty-ingestion check does not reserve exclusive extraction rights. Successf
 exhaustion describes this traversal only. Neither operation finalizes an ingestion.
 """
 
+import logging
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import Literal
@@ -11,6 +12,7 @@ from uuid import UUID
 
 from django.db import DEFAULT_DB_ALIAS
 
+from etl._coordinator_diagnostics import CoordinatorDiagnostic
 from etl.attempt_config import _configuration, _identifier
 from etl.exceptions import (
     AttemptIntegrityError,
@@ -23,6 +25,8 @@ from etl.models import PipelineRun, StagingIngestion
 from etl.pipeline_runs import _check_entry, run_staged_batch, stage_and_run_batch
 from etl.sources import CsvSource, ExcelSource, PostgresSource, Source, SourceBatch
 from etl.transforms.date_contract import SourceDateProfile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,37 +110,48 @@ def run_ingestion(
     claim_ttl_seconds: int,
 ) -> IngestionExecutionSummary:
     """Traverse one unopened source from zero. An interruption preserves committed batches."""
-    ingestion, options = _request(
-        ingestion_id, execution_key, profile, transformation_version, claim_ttl_seconds
-    )
-    _check_source(source, ingestion.source_kind)
-    batches = ingestion.batches.using(DEFAULT_DB_ALIAS)
-    if ingestion.status != "OPEN" or batches.exists():
-        raise StagingIngestionError("Live traversal requires a fresh OPEN ingestion.")
-    summary = IngestionExecutionSummary(ingestion_id, execution_key, "run_ingestion")
-    with ExitStack() as resources:
-        # The supported adapters have idempotent exits. Register cleanup before
-        # opening, since an adapter may acquire a handle then fail in __enter__.
-        resources.push(source)
-        opened = source.__enter__()
-        names = _source_names(opened)
-        for number, batch in enumerate(opened.extract()):
-            if (
-                type(batch) is not SourceBatch
-                or type(batch.batch_number) is not int
-                or batch.batch_number != number
-                or type(batch.source_name) is not str
-                or batch.source_name not in names
-            ):
-                raise StagingIntegrityError("Unexpected live batch number or source identity.")
-            run = stage_and_run_batch(batch=batch, **options)
-            summary = summary._record(number, run)
-            if summary.failed_run_id is not None:
-                return summary
-            del batch
-    if batches.count() != summary.successful_batches:
-        raise StagingIntegrityError("Stored batch range differs from the traversed source.")
-    return replace(summary, source_exhausted=True)
+    with CoordinatorDiagnostic(logger, "run_ingestion", ingestion_id, execution_key) as diagnostic:
+        ingestion, options = _request(
+            ingestion_id, execution_key, profile, transformation_version, claim_ttl_seconds
+        )
+        _check_source(source, ingestion.source_kind)
+        batches = ingestion.batches.using(DEFAULT_DB_ALIAS)
+        if ingestion.status != "OPEN" or batches.exists():
+            raise StagingIngestionError("Live traversal requires a fresh OPEN ingestion.")
+        summary = IngestionExecutionSummary(ingestion_id, execution_key, "run_ingestion")
+        diagnostic.stage = "source_read"
+        with ExitStack() as resources:
+            # The supported adapters have idempotent exits. Register cleanup before
+            # opening, since an adapter may acquire a handle then fail in __enter__.
+            resources.push(source)
+            opened = source.__enter__()
+            names = _source_names(opened)
+            for number, batch in enumerate(opened.extract()):
+                diagnostic.batch_number = number
+                if (
+                    type(batch) is not SourceBatch
+                    or type(batch.batch_number) is not int
+                    or batch.batch_number != number
+                    or type(batch.source_name) is not str
+                    or batch.source_name not in names
+                ):
+                    raise StagingIntegrityError("Unexpected live batch number or source identity.")
+                diagnostic.stage = None
+                run = stage_and_run_batch(batch=batch, **options)
+                diagnostic.stage = "finalization"
+                diagnostic.record_run(run)
+                summary = summary._record(number, run)
+                if summary.failed_run_id is not None:
+                    diagnostic.stage = "source_cleanup"
+                    return summary
+                del batch
+                diagnostic.stage = "source_read"
+                diagnostic.batch_number = diagnostic.pipeline_run_id = diagnostic.attempt_id = None
+            diagnostic.stage = "source_cleanup"
+        diagnostic.stage = "finalization"
+        if batches.count() != summary.successful_batches:
+            raise StagingIntegrityError("Stored batch range differs from the traversed source.")
+        return replace(summary, source_exhausted=True)
 
 
 def resume_staged_range(
@@ -150,28 +165,38 @@ def resume_staged_range(
     claim_ttl_seconds: int,
 ) -> IngestionExecutionSummary:
     """Execute an inclusive staged range. A successful retry verifies the existing ledger."""
-    if (
-        type(first_batch) is not int
-        or type(last_batch) is not int
-        or not 0 <= first_batch <= last_batch < 2**63
-    ):
-        raise AttemptRegistrationError("Invalid inclusive staged batch range.")
-    ingestion, options = _request(
-        ingestion_id, execution_key, profile, transformation_version, claim_ttl_seconds
-    )
-    if ingestion.status not in ("OPEN", "COMPLETE"):
-        raise StagingIngestionError("Staged continuation requires an OPEN or COMPLETE ingestion.")
-    selected = ingestion.batches.using(DEFAULT_DB_ALIAS).filter(
-        batch_number__range=(first_batch, last_batch)
-    )
-    if selected.count() != last_batch - first_batch + 1:
-        raise StagingBatchNotFoundError("The requested staged range contains a missing batch.")
-    summary = IngestionExecutionSummary(
-        ingestion_id, execution_key, "resume_staged_range", first_batch, last_batch
-    )
-    for number in range(first_batch, last_batch + 1):
-        run = run_staged_batch(batch_number=number, **options)
-        summary = summary._record(number, run)
-        if summary.failed_run_id is not None:
-            break
-    return summary
+    with CoordinatorDiagnostic(
+        logger, "resume_staged_range", ingestion_id, execution_key
+    ) as diagnostic:
+        if (
+            type(first_batch) is not int
+            or type(last_batch) is not int
+            or not 0 <= first_batch <= last_batch < 2**63
+        ):
+            raise AttemptRegistrationError("Invalid inclusive staged batch range.")
+        ingestion, options = _request(
+            ingestion_id, execution_key, profile, transformation_version, claim_ttl_seconds
+        )
+        if ingestion.status not in ("OPEN", "COMPLETE"):
+            raise StagingIngestionError(
+                "Staged continuation requires an OPEN or COMPLETE ingestion."
+            )
+        selected = ingestion.batches.using(DEFAULT_DB_ALIAS).filter(
+            batch_number__range=(first_batch, last_batch)
+        )
+        if selected.count() != last_batch - first_batch + 1:
+            raise StagingBatchNotFoundError("The requested staged range contains a missing batch.")
+        summary = IngestionExecutionSummary(
+            ingestion_id, execution_key, "resume_staged_range", first_batch, last_batch
+        )
+        for number in range(first_batch, last_batch + 1):
+            diagnostic.batch_number = number
+            diagnostic.pipeline_run_id = diagnostic.attempt_id = None
+            diagnostic.stage = None
+            run = run_staged_batch(batch_number=number, **options)
+            diagnostic.stage = "finalization"
+            diagnostic.record_run(run)
+            summary = summary._record(number, run)
+            if summary.failed_run_id is not None:
+                break
+        return summary

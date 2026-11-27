@@ -9,6 +9,7 @@ from typing import Iterator, Union
 
 import pandas as pd
 
+from etl._coordinator_diagnostics import safe_log
 from etl.exceptions import MalformedSourceError, MissingColumnsError, SourceNotFoundError
 from etl.sources._cleanup import close_resources
 from etl.sources.contract import CANONICAL_COLUMNS, SourceBatch
@@ -55,7 +56,9 @@ class CsvSource:
                 missing = set(CANONICAL_COLUMNS) - set(chunk.columns)
                 if missing:
                     raise MissingColumnsError(f"CSV source is missing columns: {sorted(missing)}")
-                logger.info(
+                safe_log(
+                    logger,
+                    logging.INFO,
                     "csv_source.batch",
                     extra={"batch": batch_number, "rows": len(chunk)},
                 )

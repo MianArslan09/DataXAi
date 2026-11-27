@@ -23,6 +23,7 @@ import pandas
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django.utils import timezone
 
+from etl._coordinator_diagnostics import CoordinatorDiagnostic, safe_log
 from etl.attempt_config import _configuration, _hash, _identifier, _stored_profile, _text
 from etl.exceptions import StagingIngestionError, StagingIntegrityError
 from etl.models import IngestionCompletionProof, PipelineRun, StagingIngestion
@@ -195,70 +196,84 @@ def bind_file_ingestion(
     expected_row_count: int | None = None,
 ) -> IngestionCompletionProof:
     """Capture under publisher custody, then bind under the staging writer's parent lock."""
-    connection = connections[DEFAULT_DB_ALIAS]
-    _require(
-        connection.vendor == "postgresql"
-        and not connection.in_atomic_block
-        and connection.get_autocommit(),
-        "Binding requires PostgreSQL outermost autocommit.",
-    )
-    _require(
-        type(ingestion_id) is UUID and type(execution_key) is UUID, "Expected UUID identities."
-    )
-    _require(
-        all(n is None or _count(n) for n in (expected_batch_count, expected_row_count)),
-        "Invalid declared source counts.",
-    )
-    if expected_sha256 is not None:
-        SourceSnapshot(expected_sha256, 0)
-    configuration = _configuration(profile)
-    version = _identifier(transformation_version, 128)
-    recipe = _recipe(scope)
-    started = perf_counter()
-    snapshot = capture_snapshot(input_path)
-    logger.info("completion.snapshot_capture", extra={"elapsed_seconds": perf_counter() - started})
-    _require(
-        expected_sha256 is None or expected_sha256 == snapshot.sha256,
-        "Input differs from the declared snapshot.",
-    )
-    values = dict(
-        proof_version=1,
-        source_kind="CSV" if type(scope) is CsvScope else "EXCEL",
-        source_reference=scope.filename,
-        snapshot_sha256=snapshot.sha256,
-        snapshot_size=snapshot.size_bytes,
-        parser_recipe=recipe,
-        batch_size=scope.batch_size,
-        execution_key=execution_key,
-        configuration=configuration,
-        configuration_hash=_hash(configuration),
-        transformation_version=version,
-        expected_batches=expected_batch_count,
-        expected_rows=expected_row_count,
-    )
-    with transaction.atomic(using=DEFAULT_DB_ALIAS):
-        ingestion = _locked_ingestion(ingestion_id)
+    with CoordinatorDiagnostic(
+        logger, "bind_file_ingestion", ingestion_id, execution_key
+    ) as diagnostic:
+        connection = connections[DEFAULT_DB_ALIAS]
         _require(
-            ingestion.status == "OPEN"
-            and ingestion.source_kind == values["source_kind"]
-            and ingestion.source_reference == scope.filename,
-            "Ingestion is ineligible for binding.",
+            connection.vendor == "postgresql"
+            and not connection.in_atomic_block
+            and connection.get_autocommit(),
+            "Binding requires PostgreSQL outermost autocommit.",
         )
-        proof = IngestionCompletionProof.objects.select_for_update().filter(pk=ingestion_id).first()
-        if proof is not None:
-            _verify_binding(ingestion, proof)
+        _require(
+            type(ingestion_id) is UUID and type(execution_key) is UUID, "Expected UUID identities."
+        )
+        _require(
+            all(n is None or _count(n) for n in (expected_batch_count, expected_row_count)),
+            "Invalid declared source counts.",
+        )
+        if expected_sha256 is not None:
+            SourceSnapshot(expected_sha256, 0)
+        configuration = _configuration(profile)
+        version = _identifier(transformation_version, 128)
+        recipe = _recipe(scope)
+        started = perf_counter()
+        diagnostic.stage = "snapshot_capture"
+        snapshot = capture_snapshot(input_path)
+        safe_log(
+            logger,
+            logging.INFO,
+            "completion.snapshot_capture",
+            extra={"elapsed_seconds": perf_counter() - started},
+        )
+        _require(
+            expected_sha256 is None or expected_sha256 == snapshot.sha256,
+            "Input differs from the declared snapshot.",
+        )
+        diagnostic.stage = "binding"
+        values = dict(
+            proof_version=1,
+            source_kind="CSV" if type(scope) is CsvScope else "EXCEL",
+            source_reference=scope.filename,
+            snapshot_sha256=snapshot.sha256,
+            snapshot_size=snapshot.size_bytes,
+            parser_recipe=recipe,
+            batch_size=scope.batch_size,
+            execution_key=execution_key,
+            configuration=configuration,
+            configuration_hash=_hash(configuration),
+            transformation_version=version,
+            expected_batches=expected_batch_count,
+            expected_rows=expected_row_count,
+        )
+        with transaction.atomic(using=DEFAULT_DB_ALIAS):
+            ingestion = _locked_ingestion(ingestion_id)
             _require(
-                proof.sealed_at is None and all(getattr(proof, k) == v for k, v in values.items()),
-                "Conflicting ingestion binding.",
+                ingestion.status == "OPEN"
+                and ingestion.source_kind == values["source_kind"]
+                and ingestion.source_reference == scope.filename,
+                "Ingestion is ineligible for binding.",
             )
+            proof = (
+                IngestionCompletionProof.objects.select_for_update().filter(pk=ingestion_id).first()
+            )
+            if proof is not None:
+                _verify_binding(ingestion, proof)
+                _require(
+                    proof.sealed_at is None
+                    and all(getattr(proof, k) == v for k, v in values.items()),
+                    "Conflicting ingestion binding.",
+                )
+                return proof
+            _require(
+                not ingestion.batches.exists(),
+                "Cannot bind an ingestion after staging has started.",
+            )
+            proof = IngestionCompletionProof(ingestion=ingestion, bound_at=timezone.now(), **values)
+            proof.binding_digest = _binding_digest(proof)
+            proof.save(force_insert=True, using=DEFAULT_DB_ALIAS)
             return proof
-        _require(
-            not ingestion.batches.exists(), "Cannot bind an ingestion after staging has started."
-        )
-        proof = IngestionCompletionProof(ingestion=ingestion, bound_at=timezone.now(), **values)
-        proof.binding_digest = _binding_digest(proof)
-        proof.save(force_insert=True, using=DEFAULT_DB_ALIAS)
-        return proof
 
 
 class _Manifest:
@@ -508,7 +523,9 @@ def _seal(ingestion_id, binding_digest, observed):
                     "updated_at",
                 ]
             )
-    logger.info(
+    safe_log(
+        logger,
+        logging.INFO,
         "completion.finalize",
         extra={
             "lock_wait_seconds": locked_at - before_lock,
@@ -522,92 +539,121 @@ def complete_bound_ingestion(
     *, ingestion_id: UUID, claim_ttl_seconds: int
 ) -> IngestionCompletionProof:
     """Traverse from zero and seal, or verify an existing receipt without opening the source."""
-    _check_entry(claim_ttl_seconds)
-    _require(type(ingestion_id) is UUID, "Expected a UUID ingestion identity.")
-    try:
-        proof = IngestionCompletionProof.objects.select_related("ingestion").get(pk=ingestion_id)
-    except IngestionCompletionProof.DoesNotExist:
-        raise StagingIngestionError("Ingestion has no file binding.") from None
-    snapshot, scope, profile = _verify_binding(proof.ingestion, proof)
-    if proof.ingestion.status == "COMPLETE":
-        return _seal(ingestion_id, proof.binding_digest, None)
-    _require(
-        proof.ingestion.status == "OPEN" and proof.sealed_at is None,
-        "Ingestion cannot be traversed.",
-    )
-    csv = type(scope) is CsvScope
-    parser = (
-        open_snapshot_csv(
-            snapshot, filename=scope.filename, batch_size=scope.batch_size, encoding=scope.encoding
+    with CoordinatorDiagnostic(logger, "complete_bound_ingestion", ingestion_id) as diagnostic:
+        _check_entry(claim_ttl_seconds)
+        _require(type(ingestion_id) is UUID, "Expected a UUID ingestion identity.")
+        try:
+            proof = IngestionCompletionProof.objects.select_related("ingestion").get(
+                pk=ingestion_id
+            )
+        except IngestionCompletionProof.DoesNotExist:
+            raise StagingIngestionError("Ingestion has no file binding.") from None
+        diagnostic.execution_key = proof.execution_key
+        diagnostic.stage = "binding"
+        snapshot, scope, profile = _verify_binding(proof.ingestion, proof)
+        if proof.ingestion.status == "COMPLETE":
+            diagnostic.stage = "acknowledgment"
+            return _seal(ingestion_id, proof.binding_digest, None)
+        _require(
+            proof.ingestion.status == "OPEN" and proof.sealed_at is None,
+            "Ingestion cannot be traversed.",
         )
-        if csv
-        else open_snapshot_excel(
-            snapshot,
-            filename=scope.filename,
-            batch_size=scope.batch_size,
-            sheet_names=scope.sheet_names,
+        diagnostic.stage = "source_read"
+        csv = type(scope) is CsvScope
+        parser = (
+            open_snapshot_csv(
+                snapshot,
+                filename=scope.filename,
+                batch_size=scope.batch_size,
+                encoding=scope.encoding,
+            )
+            if csv
+            else open_snapshot_excel(
+                snapshot,
+                filename=scope.filename,
+                batch_size=scope.batch_size,
+                sheet_names=scope.sheet_names,
+            )
         )
-    )
-    manifest = _Manifest()
-    processing = 0.0
-    started = perf_counter()
-    with parser as traversal:
-        if csv:
-            names = {f"csv:{scope.filename}"}
-        else:
-            _sheets(traversal.selected_sheets)
-            names = {f"xlsx:{scope.filename}:{name}" for name in traversal.selected_sheets}
-        for batch in traversal:
-            _require(
-                type(batch) is SourceBatch
-                and type(batch.batch_number) is int
-                and batch.batch_number == manifest.batches
-                and batch.source_name in names,
-                "Unexpected batch source or sequence.",
-            )
-            timer = perf_counter()
-            staged, digest = _stage_with_digest(ingestion_id=ingestion_id, batch=batch)
-            manifest.add(batch.batch_number, batch.source_name, len(batch), digest)
-            run = run_staged_batch(
-                ingestion_id=ingestion_id,
-                batch_number=batch.batch_number,
-                attempt_key=proof.execution_key,
-                profile=profile,
-                transformation_version=proof.transformation_version,
-                claim_ttl_seconds=claim_ttl_seconds,
-            )
-            _require(
-                run.status == PipelineRun.Status.SUCCEEDED
-                and run.records_ingested == staged.row_count == len(batch),
-                "Bound execution did not successfully interpret the staged batch.",
-            )
-            processing += perf_counter() - timer
-            del batch
-    _require(traversal.verified_exhausted, "Snapshot traversal was not verified.")
-    if csv:
-        coverage = {"csv_header": "verified", "exhaustion": "natural"}
-    else:
-        coverage = {
-            "selection": "all" if scope.sheet_names is None else "selected",
-            "exhaustion": "natural",
-            "sheets": [
-                dict(name=name, header="verified", rows=r, batches=b)
-                for name, (r, b) in zip(
-                    traversal.completed_sheets, traversal.sheet_counts, strict=True
+        manifest = _Manifest()
+        processing = 0.0
+        started = perf_counter()
+        with parser as traversal:
+            if csv:
+                names = {f"csv:{scope.filename}"}
+            else:
+                _sheets(traversal.selected_sheets)
+                names = {f"xlsx:{scope.filename}:{name}" for name in traversal.selected_sheets}
+            for batch in traversal:
+                _require(
+                    type(batch) is SourceBatch
+                    and type(batch.batch_number) is int
+                    and batch.batch_number == manifest.batches
+                    and batch.source_name in names,
+                    "Unexpected batch source or sequence.",
                 )
-            ],
-        }
-    logger.info(
-        "completion.traversal",
-        extra={
-            "inclusive_seconds": perf_counter() - started,
-            "processing_seconds": processing,
-            "precheck_seconds": traversal.precheck_seconds,
-            "postcheck_seconds": traversal.postcheck_seconds,
-        },
-    )
-    return _seal(
-        ingestion_id,
-        proof.binding_digest,
-        _Observation(manifest.batches, manifest.rows, manifest.digest, coverage),
-    )
+                diagnostic.batch_number = batch.batch_number
+                diagnostic.stage = "staging"
+                timer = perf_counter()
+                staged, digest = _stage_with_digest(ingestion_id=ingestion_id, batch=batch)
+                manifest.add(batch.batch_number, batch.source_name, len(batch), digest)
+                diagnostic.stage = None
+                run = run_staged_batch(
+                    ingestion_id=ingestion_id,
+                    batch_number=batch.batch_number,
+                    attempt_key=proof.execution_key,
+                    profile=profile,
+                    transformation_version=proof.transformation_version,
+                    claim_ttl_seconds=claim_ttl_seconds,
+                    _report_failed_result=False,
+                )
+                diagnostic.stage = "finalization"
+                diagnostic.record_run(run)
+                if run.status == PipelineRun.Status.FAILED:
+                    error = StagingIntegrityError(
+                        "Bound execution did not successfully interpret the staged batch."
+                    )
+                    diagnostic.failed_result(error=error)
+                    raise error
+                _require(
+                    run.status == PipelineRun.Status.SUCCEEDED
+                    and run.records_ingested == staged.row_count == len(batch),
+                    "Bound execution did not successfully interpret the staged batch.",
+                )
+                processing += perf_counter() - timer
+                del batch
+                diagnostic.stage = "source_read"
+                diagnostic.batch_number = diagnostic.pipeline_run_id = diagnostic.attempt_id = None
+            diagnostic.stage = "source_cleanup"
+        diagnostic.stage = "source_read"
+        _require(traversal.verified_exhausted, "Snapshot traversal was not verified.")
+        if csv:
+            coverage = {"csv_header": "verified", "exhaustion": "natural"}
+        else:
+            coverage = {
+                "selection": "all" if scope.sheet_names is None else "selected",
+                "exhaustion": "natural",
+                "sheets": [
+                    dict(name=name, header="verified", rows=r, batches=b)
+                    for name, (r, b) in zip(
+                        traversal.completed_sheets, traversal.sheet_counts, strict=True
+                    )
+                ],
+            }
+        safe_log(
+            logger,
+            logging.INFO,
+            "completion.traversal",
+            extra={
+                "inclusive_seconds": perf_counter() - started,
+                "processing_seconds": processing,
+                "precheck_seconds": traversal.precheck_seconds,
+                "postcheck_seconds": traversal.postcheck_seconds,
+            },
+        )
+        diagnostic.stage = "sealing"
+        return _seal(
+            ingestion_id,
+            proof.binding_digest,
+            _Observation(manifest.batches, manifest.rows, manifest.digest, coverage),
+        )

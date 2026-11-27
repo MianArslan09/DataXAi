@@ -59,6 +59,8 @@ class FailureReason(StrEnum):
     CONNECTION_INTERRUPTED = "connection_interrupted"
     TRANSACTION_CONFLICT = "transaction_conflict"
     DATABASE_CONFIGURATION = "database_configuration"
+    # Coordinators use this only after observing FAILED; exception type alone cannot infer it.
+    TERMINAL_ATTEMPT_FAILED = "terminal_attempt_failed"
 
 
 @dataclass(frozen=True, slots=True)
