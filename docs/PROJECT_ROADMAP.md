@@ -282,3 +282,14 @@ Verification covered three real pre-commit connection interruptions, three simul
 All three Volume 4.6 technical gates are locally verified or previously integrated. Gate 3 remains uncommitted in `D:\dataxai-etl-4.6-gate3` on `feat/etl-4.6-gate3`, baseline HEAD `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`. Separate technical and documentation commits, GitHub CI and merge remain pending for manual owner execution. **Formal Volume 4.6 closure remains pending successful integration into main.**
 
 **Next planned milestone: Volume 4.7, after formal Volume 4.6 closure**, subject to separate scope review and explicit owner authorization. No new Volume 4.7 requirements are established and no implementation is authorized here. Volumes 4.8 and 4.9 retain their separately gated roadmap roles. Current work stops after the three authorized documentation updates and reporting; Git integration and the Excel tracker remain owner-controlled.
+
+## 2026-11-27 — Volume 4.6 closed and Volume 4.7 Gate 1 accepted
+
+| Milestone | Status and next step |
+| --- | --- |
+| Volume 4.6 | Formally owner accepted and merged through [PR #17](https://github.com/MianArslan09/DataXAi/pull/17) at `21d32aed329f4eca62c76ccd4c87d01ea36d5bba`. All three CI jobs passed. |
+| Volume 4.7 Gate 1 | Real PostgreSQL Source Integration and Required Verification is implemented, independently reviewed, locally PostgreSQL-verified and formally owner accepted. Separate technical and documentation commits, push, PR, candidate CI and merge remain pending. |
+| Volume 4.7 Gate 2 | CSV/XLSX cleanup-failure verification is approved within the two-gate plan. Implementation awaits separate owner authorization. Volume 4.7 remains incomplete. |
+| Volumes 4.8 and 4.9 | The roadmap retains 4.8 for ETL testing and 4.9 for the ETL Verification Checkpoint. |
+
+The [Gate 1 acceptance record](PROJECT_STATE.md#volume-47-gate-1-acceptance) distinguishes the prior Volume 4.6 CI results from Gate 1's local verification and records the limits of the interruption and replay evidence.

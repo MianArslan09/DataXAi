@@ -91,7 +91,7 @@ applying service configuration to them is a separate operational action.
 
 ## PostgreSQL integration tests
 
-Tests resolve `TEST_SOURCE_DATABASE_URL` through python-decouple when explicitly
+In optional mode, source tests resolve `TEST_SOURCE_DATABASE_URL` through python-decouple when explicitly
 provided, otherwise use Django's configured `SOURCE_DATABASE_URL`. CI's existing
 explicit test URL remains supported. Omit the test variable to share the local
 source connection; an explicitly empty or malformed test URL is an error, not
@@ -99,13 +99,13 @@ a request to choose a fallback. There is no source fallback to application port
 5432.
 
 The availability gate uses a three-second connection timeout and disposes its
-engine on success or failure. Connection failures still skip database-dependent
+engine on success or failure. In optional mode, availability failures skip marked
 tests; skip messages contain no URL or credentials. Invalid URL configuration
 fails collection with a sanitized message. Unexpected programming errors are
 not suppressed as database unavailability. Always inspect passed/skipped counts:
 an exit code of zero with skipped tests is not PostgreSQL verification.
 
-From a fresh Windows terminal using the project's existing environment:
+For the optional source checks, from a fresh Windows terminal in the main checkout:
 
 ```powershell
 .\dataxaienv\Scripts\python.exe manage.py check
@@ -128,3 +128,13 @@ type conversion and dates:
 These tests require the existing 18-row `public.raw_transactions` fixture. They
 do not seed or repair it. A healthy container confirms server availability,
 not that a particular client's password, hostname, or port is correct.
+
+### Required Gate 1 verification
+
+Set `DATAXAI_REQUIRE_SOURCE_POSTGRES=1` in the test process environment and supply an explicit `TEST_SOURCE_DATABASE_URL` through the environment or local ignored `.env`. In required mode the source checks fail with controlled diagnostics if the target is unavailable or the seed is incorrect. The Gate 1 integration module enforces these checks even when the flag is unset. The backend CI job sets the flag for its seeded source service. Candidate CI verification remains pending.
+
+- **Source target.** Use the `postgresql+psycopg` driver, host `127.0.0.1`, `localhost` or `::1`, explicit port `5433`, and database and role `dataxai_source`. The required target accepts no URL query parameters and rejects nonempty process overrides for `PGHOSTADDR`, `PGSERVICE` and `PGOPTIONS`. Required mode does not fall back to the configured application or upstream URL.
+- **Seed check.** The verifier checks the connected database and role and confirms that the adapter's unqualified `raw_transactions` resolves to `public.raw_transactions`. It reads up to 19 rows and compares all eight canonical columns against the 18-row `online_retail_ii_sample.csv` fixture, including duplicate multiplicity in any order. The source role needs read access. The verifier does not repair or reseed the source.
+- **Application target.** Gate 1 separately checks loopback port `5432` using the application `POSTGRES_*` configuration. The application role must be able to connect to `postgres` and create the disposable test database. Keep the existing serial fixture and its isolated database for staging and execution writes.
+- **Collection behavior.** Configure both targets before invoking pytest. The source helper validates URL configuration at import. Its shared marker probes availability for selected tests, and `test_sources_contract.py` also calls the availability check during import. Collection alone, including a run filtered with `-k`, can therefore contact PostgreSQL.
+- **Credentials.** Supply the existing source role password privately in the correctly encoded test URL. Keep the resolved URL and credentials out of command history, console output, reports and version control. After a temporary session override, restore the prior environment. An authentication failure calls for checking the supplied credential against the existing source service.

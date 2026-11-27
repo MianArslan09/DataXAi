@@ -288,3 +288,11 @@ Post-commit acknowledgment loss was simulated after real successful commits; thi
 Worktree: `D:\dataxai-etl-4.6-gate3`; branch: `feat/etl-4.6-gate3`; local HEAD: `6e2f4658cd4651fbe86113f1ffcfd33a1fca887e`. All three Volume 4.6 technical gates are locally verified or previously integrated. Gate 3 technical and documentation commits, GitHub CI and merge remain pending. Formal Volume 4.6 closure requires successful integration into main.
 
 Current authorization is documentation-only for `AGENTS.md`, `docs/PROJECT_STATE.md` and `docs/PROJECT_ROADMAP.md`. The owner will perform all Git integration manually. Do not stage, commit, push, rename branches, create/merge PRs, change Git credentials, modify technical files or the Excel tracker, or alter protected worktrees. Volume 4.7 is the next planned milestone after formal Volume 4.6 closure; scope review and separate owner authorization are required. Stop after documentation and reporting.
+
+## 2026-11-27 — Volume 4.7 Gate 1 formally owner accepted
+
+Volume 4.6 is formally accepted and merged through [PR #17](https://github.com/MianArslan09/DataXAi/pull/17) at `21d32aed329f4eca62c76ccd4c87d01ea36d5bba`. The owner formally accepts Volume 4.7 Gate 1, Real PostgreSQL Source Integration and Required Verification, within its implemented, independently reviewed and locally verified scope. The [project-state checkpoint](docs/PROJECT_STATE.md#volume-47-gate-1-acceptance) records the owner-executed PostgreSQL results separately from the earlier CI evidence.
+
+Preserve unordered PostgreSQL extraction, same-traversal SER-v1 evidence, positional lineage, legitimate duplicate multiplicity and signed values. Keep the seeded source separate from the disposable application database. Preserve exact committed-prefix accounting, explicit staged-only replay and safe diagnostic classification. PostgreSQL ingestions remain OPEN without authoritative final counts or completion proofs.
+
+Volume 4.7 remains incomplete. Gate 2 is approved in the plan and requires separate implementation authorization. Separate Gate 1 technical and documentation commits, push, PR, candidate CI and merge remain pending on `feat/etl-4.7-gate1`. Existing engineering and Git guardrails continue to apply.
