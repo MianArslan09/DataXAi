@@ -296,3 +296,17 @@ Volume 4.6 is formally accepted and merged through [PR #17](https://github.com/M
 Preserve unordered PostgreSQL extraction, same-traversal SER-v1 evidence, positional lineage, legitimate duplicate multiplicity and signed values. Keep the seeded source separate from the disposable application database. Preserve exact committed-prefix accounting, explicit staged-only replay and safe diagnostic classification. PostgreSQL ingestions remain OPEN without authoritative final counts or completion proofs.
 
 Volume 4.7 remains incomplete. Gate 2 is approved in the plan and requires separate implementation authorization. Separate Gate 1 technical and documentation commits, push, PR, candidate CI and merge remain pending on `feat/etl-4.7-gate1`. Existing engineering and Git guardrails continue to apply.
+
+## 2026-11-27 — Volume 4.7 Gate 2 formally owner accepted
+
+This checkpoint supersedes earlier current-status summaries while retaining their historical context and all existing engineering guardrails.
+
+Gate 1 is formally accepted and merged through PR #18 at `01f58f3a15a0a401d0cc1d9d031b34379e815f02`. The reviewer independently confirmed the merge. Candidate CI passed according to the owner, who requested that CI not be independently reinspected.
+
+Gate 2 — Persisted Completion Behavior After CSV and XLSX Parser Cleanup Failure — is IMPLEMENTED, TESTED, LOCALLY VERIFIED and POSTGRES VERIFIED within its accepted scope, independently reviewed and FORMALLY OWNER ACCEPTED. Its sole technical file is `apps/etl/tests/test_coordinator_failures_postgres.py`. Preserve the real parsing and persistence boundaries, independently observed commits, exact synthetic exception identity, unsealed failure state, immutable binding and snapshot, original execution and raw SER-v1 data through explicit recovery, safe rendered diagnostics, and read-only sealed acknowledgment with parser-recipe verification.
+
+Owner-executed verification on November 27 recorded four passes in 12.24 seconds with zero failures, errors or skips. Independent source review identified no blocking findings and required no implementation correction cycle. Full evidence provenance and limitations are recorded in the [Gate 2 acceptance checkpoint](docs/PROJECT_STATE.md#volume-47-gate-2-acceptance).
+
+Carry forward explicit acceptance boundaries, requirement-to-assertion traceability, false-positive prevention, exact persisted-state comparison and critical self-review before submission. Arrange independent source review before expensive manual verification. Preserve owner-managed baseline fetching and workspace preparation under the applicable authorization. Apply these principles proportionately within existing gates and focused verification.
+
+The worktree is `D:\dataxai-etl-4.7-gate2`, branch `feat/etl-4.7-gate2`, at the Gate 1 merge baseline above. Gate 2 technical and documentation commits, push, PR, candidate CI and merge remain pending. **Volume 4.7 is ready for final integration. Formal closure requires Gate 2 merge and verified integration.** Volume 4.8 awaits separate planning and owner authorization. Current authorization covers only the three acceptance documents and reporting, with the technical file, empty Git index, other worktrees and Excel tracker preserved.

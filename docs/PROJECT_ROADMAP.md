@@ -293,3 +293,19 @@ All three Volume 4.6 technical gates are locally verified or previously integrat
 | Volumes 4.8 and 4.9 | The roadmap retains 4.8 for ETL testing and 4.9 for the ETL Verification Checkpoint. |
 
 The [Gate 1 acceptance record](PROJECT_STATE.md#volume-47-gate-1-acceptance) distinguishes the prior Volume 4.6 CI results from Gate 1's local verification and records the limits of the interruption and replay evidence.
+
+## 2026-11-27 — Volume 4.7 Gate 2 accepted and ready for final integration
+
+This checkpoint supersedes earlier pending Gate 1 integration and Gate 2 implementation summaries while preserving historical records and the established roadmap structure.
+
+| Milestone | Current status |
+| --- | --- |
+| Volume 4.7 Gate 1 | Formally accepted and merged through PR #18 at `01f58f3a15a0a401d0cc1d9d031b34379e815f02`. The reviewer independently confirmed the merge. Candidate CI passed according to the owner and was not independently reinspected at the owner's request. |
+| Volume 4.7 Gate 2 | IMPLEMENTED, TESTED, LOCALLY VERIFIED, POSTGRES VERIFIED, independently reviewed and FORMALLY OWNER ACCEPTED within the recorded scope. CSV/XLSX parser cleanup failure preserves committed work and prevents premature sealing. Explicit recovery and read-only sealed acknowledgment preserve the original execution. |
+| Volume 4.7 closure | Ready for final integration. Gate 2 technical and documentation commits, push, PR, candidate CI and merge remain pending. Formal closure requires Gate 2 merge and verified integration. |
+| Volume 4.8 | Pending separate planning and owner authorization within ETL Testing. |
+| Volume 4.9 | Retains the ETL Verification Checkpoint role. |
+
+Gate 2 changed one integration test file. Independent static source review found no blocking findings and required no correction cycle. Prior Codex evidence includes passing static checks and two database-free cleanup regressions in 4.31 seconds. The owner reports four PostgreSQL passes in 12.24 seconds with zero failures, errors or skips and successful environment restoration. The XML remains owner-retained evidence in Downloads. Detailed commit identities, guarantees, report provenance and limitations are recorded in the [Gate 2 acceptance checkpoint](PROJECT_STATE.md#volume-47-gate-2-acceptance).
+
+The cleanup fault and post-commit acknowledgment loss are deliberate simulations. Production network partitions and crash durability remain unverified. SAFE covers date interpretation, business validation remains separately gated, and the test timing establishes no throughput result. Full local regression was not run. Preserve focused acceptance boundaries, false-positive checks, exact state comparisons and independent review before expensive manual verification.
